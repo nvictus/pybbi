@@ -1,0 +1,377 @@
+# CC=gcc
+# to build on sundance: CC=gcc -mcpu=v9 -m64
+# ifeq (${COPT},)
+#     COPT=-O -g -fPIC -Wall -Wformat -Wimplicit -Wreturn-type -Wuninitialized
+# endif
+# ifeq (${CFLAGS},)
+#     CFLAGS=
+# endif
+ifeq (${MACHTYPE},)
+    MACHTYPE:=$(shell uname -m)
+#    $(info MACHTYPE was empty, set to: ${MACHTYPE})
+endif
+ifneq (,$(findstring -,$(MACHTYPE)))
+#    $(info MACHTYPE has - sign ${MACHTYPE})
+    MACHTYPE:=$(shell uname -m)
+#    $(info MACHTYPE has - sign set to: ${MACHTYPE})
+endif
+
+HG_DEFS=-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_GNU_SOURCE -DMACHTYPE_${MACHTYPE}
+#HG_INC+=-I../include -I/home/nezar/miniconda3/include/python3.5m -I./include -I/home/nezar/miniconda3/include/python3.5m -I/home/nezar/miniconda3/lib/python3.5/site-packages/numpy/core/include
+
+# to check for Mac OSX Darwin specifics:
+UNAME_S := $(shell uname -s)
+# to check for builds on hgwdev
+FULLWARN = $(shell uname -n)
+
+# #global external libraries 
+# L=
+
+# # pthreads is required
+# ifneq ($(UNAME_S),Darwin)
+#   L+=-pthread
+# endif
+
+# L+=/home/nezar/miniconda3/lib
+
+# # autodetect if openssl is installed
+# # ifeq (${SSLDIR},)
+# #   SSLDIR = /usr/include/openssl
+# # endif
+# # ifeq (${USE_SSL},)
+# #   ifneq ($(wildcard ${SSLDIR}),)
+# #      USE_SSL=1
+# #   endif
+# # endif
+# # # libssl: disabled by default
+# # ifeq (${USE_SSL},1)
+# #     ifneq (${SSL_DIR}, "/usr/include/openssl")
+# #       ifneq ($(UNAME_S),Darwin)
+# #         L+=-L${SSL_DIR}/lib
+# #       endif
+# #         HG_INC+=-I${SSL_DIR}/include
+# #     endif
+# #     # on hgwdev, already using the static library with mysqllient.
+# #     ifeq (${FULLWARN},hgwdev)
+# #        L+=/usr/lib64/libssl.a /usr/lib64/libcrypto.a -lkrb5
+# #     else
+# #        L+=-lssl -lcrypto
+# #     endif
+# #     HG_DEFS+=-DUSE_SSL
+# # endif
+
+# # autodetect where png is installed
+# # ifeq (${PNGLIB},)
+# #   ifneq ($(wildcard /usr/lib64/libpng.a),)
+# #       PNGLIB=/usr/lib64/libpng.a
+# #   endif
+# # endif
+# # ifeq (${PNGLIB},)
+# #   ifneq ($(wildcard /usr/lib/libpng.a),)
+# #       PNGLIB=/usr/lib/libpng.a
+# #   endif
+# # endif
+# # ifeq (${PNGLIB},)
+# #   ifneq ($(wildcard /opt/local/lib/libpng.a),)
+# #       PNGLIB=/opt/local/lib/libpng.a
+# #   endif
+# # endif
+# # ifeq (${PNGLIB},)
+# #   ifneq ($(wildcard /usr/local/lib/libpng.a),)
+# #       PNGLIB=/usr/local/lib/libpng.a
+# #   endif
+# # endif
+# # ifeq (${PNGLIB},)
+# #       PNGLIB := $(shell libpng-config --ldflags  || true)
+# # endif
+# # ifeq (${PNGLIB},)
+# #   PNGLIB=-lpng
+# # endif
+# # ifeq (${PNGINCL},)
+# #   ifneq ($(wildcard /opt/local/include/png.h),)
+# #       PNGINCL=-I/opt/local/include
+# #   else
+# #       PNGINCL := $(shell libpng-config --I_opts  || true)
+# # #       $(info using libpng-config to set PNGINCL: ${PNGINCL})
+# #   endif
+# # endif
+
+
+# # L+=${PNGLIB}
+# # HG_INC+=${PNGINCL}
+
+# # # autodetect UCSC installation of htslib:
+# # ifeq (${HTSDIR},)
+# #     HTSDIR = /hive/data/outside/htslib/${MACHTYPE}
+# #     ifneq ($(wildcard ${HTSDIR}),)
+# #         ifeq (${USE_HTS},)
+# #             USE_HTS=1
+# #         endif
+# #     endif
+# # endif
+
+
+# # # autodetect UCSC installation of samtabix:
+# # ifeq (${SAMTABIXDIR},)
+# #     SAMTABIXDIR = /hive/data/outside/samtabix/${MACHTYPE}
+# #     ifneq ($(wildcard ${SAMTABIXDIR}),)
+# #         ifeq (${USE_SAMTABIX},)
+# #           USE_SAMTABIX=1
+# #         endif
+# #     endif
+# # endif
+
+# # pass through COREDUMP
+# # ifneq (${COREDUMP},)
+# #     HG_DEFS+=-DCOREDUMP
+# # endif
+
+# # # autodetect UCSC additional source code with password for some external tracks on gbib
+# # GBIBDIR = /hive/groups/browser/gbib/
+# # ifneq ($(wildcard ${GBIBDIR}/*.c),)
+# #   HG_DEFS+=-DUSE_GBIB_PWD
+# #   HG_INC += -I${GBIBDIR}
+# # endif
+
+# # ifeq (${USE_HTS},1)
+# #     HG_DEFS+=-DUSE_HTS
+# #     USE_SAMTABIX=1
+# #     SAMTABIXDIR = ${HTSDIR}
+# #     SAMTABIXLIB=${HTSDIR}/libhts.a
+# # endif
+
+# # # libsamtabix (samtools + tabix + Angie's KNETFILE_HOOKS extension to it): disabled by default
+# # ifeq (${USE_SAMTABIX},1)
+# #     KNETFILE_HOOKS=1
+# #     USE_BAM=1
+# #     USE_TABIX=1
+# #     ifeq (${SAMTABIXINC},)
+# #         SAMTABIXINC = ${SAMTABIXDIR}
+# #     endif
+# #     ifeq (${SAMTABIXLIB},)
+# #         SAMTABIXLIB = ${SAMTABIXDIR}/libsamtabix.a
+# #     endif
+# #     HG_INC += -I${SAMTABIXINC}
+# #     L+=${SAMTABIXLIB} -lz
+# #     HG_DEFS+=-DUSE_SAMTABIX -DUSE_BAM -DUSE_TABIX -DKNETFILE_HOOKS
+# # else
+# #   # Deprecated but supported for mirrors, for now: independent samtools and tabix libs
+
+# #   # libbam (samtools, and Angie's KNETFILE_HOOKS extension to it): disabled by default
+# #   ifeq (${USE_BAM},1)
+# #       ifeq (${SAMINC},)
+# #           SAMINC = ${SAMDIR}
+# #       endif
+# #       ifeq (${SAMLIB},)
+# #           SAMLIB = ${SAMDIR}/libbam.a
+# #       endif
+# #       HG_INC += -I${SAMINC}
+# #       L+=${SAMLIB}
+# #       HG_DEFS+=-DUSE_BAM
+# #       ifeq (${KNETFILE_HOOKS},1)
+# #           HG_DEFS+=-DKNETFILE_HOOKS
+# #       endif
+# #   endif
+
+# #   # libtabix and Angie's KNETFILE_HOOKS extension to it: disabled by default
+# #   ifeq (${USE_TABIX},1)
+# #       ifeq (${TABIXINC},)
+# #           TABIXINC = ${TABIXDIR}
+# #       endif
+# #       ifeq (${TABIXLIB},)
+# #           TABIXLIB = ${TABIXDIR}/libtabix.a
+# #       endif
+# #       HG_INC += -I${TABIXINC}
+# #       L+=${TABIXLIB} -lz
+# #       HG_DEFS+=-DUSE_TABIX
+# #       ifeq (${KNETFILE_HOOKS},1)
+# # 	HG_DEFS+=-DKNETFILE_HOOKS
+# #       endif
+# #   endif
+# # endif
+
+# SYS = $(shell uname -s)
+
+# ifeq (${HG_WARN},)
+#   ifeq (${SYS},Darwin)
+#       HG_WARN = -Wall -Wno-unused-variable -Wno-deprecated-declarations
+#       HG_WARN_UNINIT=
+#   else
+#     ifeq (${SYS},SunOS)
+#       HG_WARN = -Wall -Wformat -Wimplicit -Wreturn-type
+#       HG_WARN_UNINIT=-Wuninitialized
+#     else
+#       ifeq (${FULLWARN},hgwdev)
+#         HG_WARN = -Wall -Werror -Wformat -Wformat-security -Wimplicit -Wreturn-type -Wempty-body -Wunused-but-set-variable
+#         HG_WARN_UNINIT=-Wuninitialized
+#       else
+#         HG_WARN = -Wall -Wformat -Wimplicit -Wreturn-type
+#         HG_WARN_UNINIT=-Wuninitialized
+#       endif
+#     endif
+#   endif
+#   # -Wuninitialized generates a warning without optimization
+#   ifeq ($(findstring -O,${COPT}),-O)
+#      HG_WARN += ${HG_WARN_UNINIT}
+#   endif
+# endif
+
+# # this is to hack around many make files not including HG_WARN in
+# # the link line
+# CFLAGS += ${HG_WARN}
+
+# # ifeq (${SCRIPTS},)
+# #     SCRIPTS=${HOME}/bin/scripts
+# # endif
+# # ifeq (${CGI_BIN},)
+# #     CGI_BIN=/usr/local/apache/cgi-bin
+# # endif
+# # ifeq (${DOCUMENTROOT},)
+# #     DOCUMENTROOT=/usr/local/apache/htdocs
+# # endif
+# # ifeq (${BINDIR},)
+# #     BINDIR = ${HOME}/bin/${MACHTYPE}
+# # endif
+# # ifeq (${ENCODE_PIPELINE_BIN},)
+# #     ENCODE_PIPELINE_BIN=/cluster/data/encode/pipeline/bin
+# # endif
+
+# # # avoid an extra leading slash when DESTDIR is empty
+# # ifeq (${DESTDIR},)
+# #   DESTBINDIR=${BINDIR}
+# # else
+# #   DESTBINDIR=${DESTDIR}/${BINDIR}
+# # endif
+
+# # # location of stringify program
+# # STRINGIFY = ${DESTBINDIR}/stringify
+
+# MKDIR=mkdir -p
+# ifeq (${STRIP},)
+#    STRIP=true
+# endif
+# CVS=cvs
+# GIT=git
+
+# # portable naming of compiled executables: add ".exe" if compiled on 
+# # Windows (with cygwin).
+# ifeq (${OS}, Windows_NT)
+#   AOUT=a
+#   EXE=.exe
+# else
+#   AOUT=a.out
+#   EXE=
+# endif
+
+#Lowelab defines
+#The lowelab specific code will be included in compilation if the following conditions are satistied
+# LOWELAB_WIKI_DEF=
+# LOWELAB_DEF=
+# ifdef LOWELAB
+#     LOWELAB_WIKI=1
+#     LOWELAB_DEF=-DLOWELAB
+# endif
+# ifdef LOWELAB_WIKI
+#     LOWELAB_WIKI_DEF=-DLOWELAB_WIKI
+# endif
+# LOWELAB_DEFS=${LOWELAB_DEF} ${LOWELAB_WIKI_DEF}
+
+# ifdef LOWELAB
+#     ifeq (${SCRIPTS},/cluster/bin/scripts)
+#         SCRIPTS=${HOME}/scripts
+#     endif
+#     ifeq (${CGI_BIN},/usr/local/apache/cgi-bin)
+#         CGI_BIN=/www/cgi-bin
+#     endif
+#     ifeq (${DOCUMENTROOT},/usr/local/apache/htdocs)
+#         DOCUMENTROOT=/www/browser-docs
+#     endif
+# endif
+
+#ENCODE COMMON VARIABLES
+# CONFIG_FILES = \
+# 	fields.ra \
+# 	labs.ra
+# CV = cv.ra
+# CVDIR=${HOME}/kent/src/hg/makeDb/trackDb/cv/alpha
+# PIPELINE_PATH=/hive/groups/encode/dcc/pipeline
+# CONFIG_DIR = ${PIPELINE_PATH}/${PIPELINE_DIR}/config
+# ENCODEDCC_DIR = ${PIPELINE_PATH}/downloads/encodeDCC
+
+
+
+O = aliType.o annoAssembly.o annoFilter.o annoFormatter.o annoFormatTab.o \
+    annoGrator.o annoGrateWig.o annoGratorQuery.o annoOption.o annoRow.o \
+    annoStreamer.o annoStreamBigBed.o annoStreamBigWig.o annoStreamTab.o annoStreamVcf.o \
+    apacheLog.o asParse.o axt.o axtAffine.o bamFile.o base64.o \
+    basicBed.o bbiRead.o bbiWrite.o bigBed.o binRange.o bits.o \
+    blastOut.o blastParse.o boxClump.o boxLump.o bPlusTree.o \
+    bwgCreate.o bwgQuery.o bwgValsOnChrom.o \
+    cda.o chain.o chainBlock.o chainConnect.o chainToAxt.o chainToPsl.o \
+    cheapcgi.o cirTree.o codebias.o colHash.o common.o correlate.o crTree.o \
+    dgRange.o diGraph.o dlist.o dnaLoad.o dnaMarkov.o dnaMotif.o dnaseq.o \
+    dnautil.o dtdParse.o dyOut.o dystring.o elmTree.o \
+    emblParse.o errCatch.o errAbort.o \
+    fa.o ffAli.o ffScore.o fieldedTable.o filePath.o fixColor.o flydna.o fof.o \
+    font/mgCourier10.o font/mgCourier12.o font/mgCourier14.o font/mgCourier18.o \
+    font/mgCourier24.o font/mgCourier34.o font/mgCourier8.o font/mgHelvetica10.o \
+    font/mgHelvetica12.o font/mgHelvetica14.o font/mgHelvetica18.o font/mgHelvetica24.o \
+    font/mgHelvetica34.o font/mgHelvetica8.o font/mgHelveticaBold10.o font/mgHelveticaBold12.o \
+    font/mgHelveticaBold14.o font/mgHelveticaBold18.o font/mgHelveticaBold24.o \
+    font/mgHelveticaBold34.o font/mgHelveticaBold8.o font/mgSixhi6.o font/mgSail8.o \
+    font/mgTimes10.o font/mgTimes12.o font/mgTimes14.o font/mgTimes18.o \
+    font/mgTimes24.o font/mgTimes34.o font/mgTimes8.o font/mgMenlo12.o \
+    fq.o fuzzyShow.o \
+    gapCalc.o gdf.o gemfont.o genomeRangeTree.o \
+    gfNet.o gff.o gff3.o gfxPoly.o gifLabel.o \
+    hacTree.o hash.o hex.o histogram.o hmmPfamParse.o hmmstats.o htmlPage.o htmshell.o \
+    hmac.o https.o intExp.o intValTree.o internet.o itsa.o iupac.o \
+    jointalign.o jpegSize.o jsonParse.o jsonWrite.o \
+    keys.o knetUdc.o kxTok.o linefile.o lineFileOnBigBed.o localmem.o log.o longToList.o \
+    maf.o mafFromAxt.o mafScore.o mailViaPipe.o md5.o memalloc.o \
+    memgfx.o meta.o metaWig.o mgCircle.o \
+    mgPolygon.o mime.o net.o nib.o nibTwo.o nt4.o numObscure.o \
+    obscure.o oldGff.o oligoTm.o options.o osunix.o pairHmm.o pairDistance.o \
+    paraFetch.o peakCluster.o \
+    phyloTree.o pipeline.o portimpl.o pngwrite.o psGfx.o psPoly.o pscmGfx.o \
+    psl.o pslGenoShow.o pslShow.o pslTbl.o pslTransMap.o pthreadDoList.o pthreadWrap.o \
+    qa.o quickHeap.o quotedP.o \
+    ra.o rainbow.o raToStruct.o rbTree.o rangeTree.o regexHelper.o repMask.o \
+    rle.o rnautil.o rqlEval.o rqlParse.o rudp.o \
+    scoreWindow.o seg.o seqOut.o seqStats.o servBrcMcw.o servCrunx.o \
+    servcis.o servcl.o servmsII.o servpws.o shaRes.o slog.o snof.o \
+    snofmake.o snofsig.o spaceSaver.o spacedColumn.o spacedSeed.o \
+    splatAli.o sqlList.o sqlNum.o subText.o sufa.o sufx.o synQueue.o \
+    tabRow.o tagStorm.o textOut.o tokenizer.o trix.o twoBit.o \
+    udc.o vcf.o vcfBits.o vGfx.o vPng.o verbose.o \
+    wildcmp.o wormdna.o \
+    xAli.o xa.o xap.o xenshow.o xmlEscape.o xp.o zlibFace.o
+
+
+CC=gcc -g
+COPTS=-fPIC
+CFLAGS=-Wall -Wformat -Wimplicit -Wreturn-type -Wuninitialized -Wl,-rpath=/home/nezar/miniconda3/lib,--no-as-needed
+LDFLAGS=-L/home/nezar/miniconda3/lib
+INC=-I./include -I../include -I/home/nezar/miniconda3/include/python3.5m -I/home/nezar/miniconda3/lib/python3.5/site-packages/numpy/core/include
+
+%.o: %.c
+	${CC} ${COPTS} ${CFLAGS} ${HG_DEFS} ${LDFLAGS} ${INC} -o $@ -c $<
+
+# %.o: %.c
+# 	${CC} ${COPT} ${CFLAGS} -L/home/nezar/miniconda3/lib -Wl,-rpath=/home/nezar/miniconda3/lib,--no-as-needed ${HG_DEFS} ${HG_WARN} ${HG_INC} ${XINC} -o $@ -c $<
+
+$(MACHTYPE)/jkweb.a: $(O) $(MACHTYPE)
+	ar rcus $(MACHTYPE)/jkweb.a $(O)
+
+$(MACHTYPE):
+	mkdir $(MACHTYPE)
+
+test:
+	cd tests && ${MAKE} test
+
+clean:
+	rm -f ${O} $(MACHTYPE)/jkweb.a
+	#cd tests && ${MAKE} clean
+
+tags:
+	etags ../include/*.h ../src/*.h ../src/*.c

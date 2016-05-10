@@ -1,0 +1,11 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+*.so
+*.o
+*.a
+kent/*.c
+
+build/
+dist/
+tmp/
