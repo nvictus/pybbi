@@ -187,6 +187,7 @@ def fetch(str inFile, str chrom, int start, int end, double missing=0.0, double 
     cdef np.ndarray[np.double_t, ndim=1] out
 
     chromList = chromobj = bbiChromList(bwf)
+    cdef boolean found = False
     while chromobj != NULL:
         if sameString(cChrom, chromobj.name):
             # we found the right chromosome
@@ -230,11 +231,16 @@ def fetch(str inFile, str chrom, int start, int end, double missing=0.0, double 
                 out[(chromobj.size - refStart):] = oob
 
             lmCleanup(&lm)
+            found = True
             break
         else:
             chromobj = chromobj.next
 
+
     bbiChromInfoFreeList(&chromList)
     bbiFileClose(&bwf)
+
+    if not found:
+        out = np.array([])
 
     return out
