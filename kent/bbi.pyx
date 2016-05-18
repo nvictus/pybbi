@@ -186,24 +186,24 @@ def fetch(str inFile, str chrom, int start, int end, double missing=0.0, double 
     cdef double saveVal
     cdef np.ndarray[np.double_t, ndim=1] out
 
+    refStart = start
+    if start <= 0:
+        start = 0
+    if end <= 0:
+        end = chromobj.size
+    length = end - refStart
+
+    if missing == 0.0:
+        out = np.zeros(length, dtype=float)
+    else:
+        out = np.full(length, fill_value=missing, dtype=float)
+
     chromList = chromobj = bbiChromList(bwf)
-    cdef boolean found = False
     while chromobj != NULL:
         if sameString(cChrom, chromobj.name):
             # we found the right chromosome
             lm = lmInit(0)
             chromName = chromobj.name
-            refStart = start
-            if start <= 0:
-                start = 0
-            if end <= 0:
-                end = chromobj.size
-
-            length = end - refStart
-            if missing == 0:
-                out = np.zeros(length, dtype=float)
-            else:
-                out = np.full(length, fill_value=missing, dtype=float)
 
             # fetch the intervals
             intervalList = interval = bigWigIntervalQuery(bwf, chromName, start, end, lm)
@@ -231,16 +231,13 @@ def fetch(str inFile, str chrom, int start, int end, double missing=0.0, double 
                 out[(chromobj.size - refStart):] = oob
 
             lmCleanup(&lm)
-            found = True
             break
         else:
             chromobj = chromobj.next
-
+    else:
+        raise KeyError("Chromosome not found: {}".format(chrom))
 
     bbiChromInfoFreeList(&chromList)
     bbiFileClose(&bwf)
-
-    if not found:
-        out = np.array([])
 
     return out
