@@ -116,128 +116,116 @@ cdef extern from "bigWig.h":
     bbiInterval *bigWigIntervalQuery(bbiFile *bwf, char *chrom, bits32 start, bits32 end, lm *lm)
 
 
-def bigWigToBedGraph(inFile, char *chrom_, int start_, int end_):
-    cdef bbiFile *bwf = bigWigFileOpen(inFile)
-    cdef bbiChromInfo *chromList
-    cdef bbiChromInfo *chrom
+
+cdef inline _fetch(np.ndarray[np.double_t, ndim=1] out, 
+            bbiFile *bwf, char *chromName, int start, int end,
+            int refStart, int chromSize, double missing, double oob):
     cdef bbiInterval *intervalList
     cdef bbiInterval *interval
     cdef lm *lm
-    
     cdef boolean firstTime
     cdef int saveStart, prevEnd
     cdef double saveVal
 
-    chromList = chrom = bbiChromList(bwf)
-    while chrom != NULL:
-        if sameString(chrom_, chrom.name):
-            # we found the right chromosome
-            lm = lmInit(0)
-            chromName = chrom.name
-            start = 0
-            end = chrom.size
-            if start_ > 0:
-                start = start_
-            if end_ > 0:
-                end = end_
+    lm = lmInit(0)
+    intervalList = interval = bigWigIntervalQuery(bwf, chromName, start, end, lm)
+    firstTime = True
+    saveStart = -1
+    prevEnd = -1
+    saveVal = -1.0
+    while interval != NULL:
+        if firstTime:
+            saveStart = interval.start
+            saveVal = interval.val
+            firstTime = False
+        elif not ( (interval.start == prevEnd) and (interval.val == saveVal) ):
+            out[saveStart-refStart:prevEnd-refStart] = saveVal
+            saveStart = interval.start
+            saveVal = interval.val
+        prevEnd = interval.end
+        interval = interval.next
 
-            # fetch the intervals
-            intervalList = interval = bigWigIntervalQuery(bwf, chromName, start, end, lm)
-            firstTime = True
-            saveStart = -1
-            prevEnd = -1
-            saveVal = -1.0
-            while interval != NULL:
-                if firstTime:
-                    saveStart = interval.start
-                    saveVal = interval.val
-                    firstTime = False
-                elif not ( (interval.start == prevEnd) and (interval.val == saveVal) ):
-                    print(chromName, saveStart, prevEnd, saveVal)
-                    saveStart = interval.start
-                    saveVal = interval.val
-                prevEnd = interval.end
-                interval = interval.next
-            if not firstTime:
-               print(chromName, saveStart, prevEnd, saveVal)
-            lmCleanup(&lm)
-            break
-        else:
-            chrom = chrom.next
+    if not firstTime:
+       out[saveStart-refStart:prevEnd-refStart] = saveVal
 
-    bbiChromInfoFreeList(&chromList)
-    bbiFileClose(&bwf)
+    if refStart < start:
+        out[:(start-refStart)] = oob
+    if end >= chromSize:
+        out[(chromSize - refStart):] = oob
+
+    lmCleanup(&lm)
 
 
 def fetch(str inFile, str chrom, int start, int end, double missing=0.0, double oob=np.nan):
+    """
+    Fetch a BigWig interval at base pair resolution as a numpy array.
+
+    Parameters
+    ----------
+    inFile : str
+        Path to BigWig file.
+    chrom : str
+        Chromosome name.
+    start : int
+        Start coordinate. If start is less than zero, the beginning of the track
+        is not truncated but treated as out of bounds.
+    end : int
+        End coordinate. If end is less than zero, the end is set to the
+        chromosome size. If end is greater than the chromosome size, the end of
+        the track is not truncated but treated as out of bounds.
+    missing : float
+        Fill-in value for unreported data in valid regions. Default is 0.
+    oob : float
+        Fill-in value for out-of-bounds regions. Default is NaN.
+
+    Returns
+    -------
+    out : ndarray
+
+    """
     cdef bytes bInFile = inFile.encode('utf-8')
-    cdef bytes bChrom = chrom.encode('utf-8')
     cdef char *cInFile = bInFile
+    cdef bytes bChrom = chrom.encode('utf-8')
     cdef char *cChrom = bChrom
     cdef bbiFile *bwf = bigWigFileOpen(cInFile)
-
     cdef bbiChromInfo *chromList
     cdef bbiChromInfo *chromobj
-    cdef bbiInterval *intervalList
-    cdef bbiInterval *interval
-    cdef lm *lm
-    cdef boolean firstTime
-    cdef int saveStart, prevEnd, refStart, length
-    cdef double saveVal
+    cdef int refStart, length
+
     cdef np.ndarray[np.double_t, ndim=1] out
 
+    chromList = chromobj = bbiChromList(bwf)
+    while chromobj != NULL:
+        if sameString(cChrom, chromobj.name):
+            break
+        chromobj = chromobj.next
+    else:
+        raise KeyError("Chromosome not found: {}".format(chrom))
+
     refStart = start
-    if start <= 0:
+    if start < 0:
         start = 0
-    if end <= 0:
+    if end < 0:
         end = chromobj.size
     length = end - refStart
+
+    if length < 0:
+        raise ValueError(
+            "Interval cannot have negative length:"
+            " start = {}, end = {}.".format(start, end))
 
     if missing == 0.0:
         out = np.zeros(length, dtype=float)
     else:
         out = np.full(length, fill_value=missing, dtype=float)
 
-    chromList = chromobj = bbiChromList(bwf)
-    while chromobj != NULL:
-        if sameString(cChrom, chromobj.name):
-            # we found the right chromosome
-            lm = lmInit(0)
-            chromName = chromobj.name
-
-            # fetch the intervals
-            intervalList = interval = bigWigIntervalQuery(bwf, chromName, start, end, lm)
-            firstTime = True
-            saveStart = -1
-            prevEnd = -1
-            saveVal = -1.0
-            while interval != NULL:
-                if firstTime:
-                    saveStart = interval.start
-                    saveVal = interval.val
-                    firstTime = False
-                elif not ( (interval.start == prevEnd) and (interval.val == saveVal) ):
-                    out[saveStart-refStart:prevEnd-refStart] = saveVal
-                    saveStart = interval.start
-                    saveVal = interval.val
-                prevEnd = interval.end
-                interval = interval.next
-            if not firstTime:
-               out[saveStart-refStart:prevEnd-refStart] = saveVal
-
-            if refStart < start:
-                out[:(start-refStart)] = oob
-            if end >= chromobj.size:
-                out[(chromobj.size - refStart):] = oob
-
-            lmCleanup(&lm)
-            break
-        else:
-            chromobj = chromobj.next
-    else:
-        raise KeyError("Chromosome not found: {}".format(chrom))
+    _fetch(out, bwf, chromobj.name, start, end, refStart, chromobj.size, missing, oob)
 
     bbiChromInfoFreeList(&chromList)
     bbiFileClose(&bwf)
 
     return out
+
+
+#def pileup(str infile, pd.DataFrame bed, double missing=0.0, double oob=np.nan):
+#    pass
