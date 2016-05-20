@@ -156,6 +156,62 @@ cdef inline _fetch(np.ndarray[np.double_t, ndim=1] out,
     lmCleanup(&lm)
 
 
+def pileup(str inFile, 
+        np.ndarray[object, ndim=1] chroms,
+        np.ndarray[np.int_t, ndim=1] starts,
+        np.ndarray[np.int_t, ndim=1] ends,
+        double missing=0.0,
+        double oob=np.nan):
+    """
+    Pileup bigwig intervals.
+
+    """
+    cdef bytes bInFile = inFile.encode('utf-8')
+    cdef char *cInFile = bInFile
+    cdef bbiFile *bwf = bigWigFileOpen(cInFile)
+    
+    cdef int n = chroms.shape[0]
+    cdef length = ends[0] - starts[0]
+
+    cdef int start, end, refStart, i
+    cdef bbiChromInfo *chromList
+    cdef bbiChromInfo *chromobj
+    cdef bytes bChrom
+    cdef char *cChrom
+
+    if not len(np.unique(ends - starts)) == 1:
+        raise ValueError("Windows must have equal size")
+
+    if missing == 0.0:
+        out = np.zeros((n, length), dtype=float)
+    else:
+        out = np.full((n, length), fill_value=missing, dtype=float)
+
+    for i in range(n):
+        bChrom = chroms[i].encode('utf-8')
+        cChrom = bChrom
+        chromList = chromobj = bbiChromList(bwf)
+        while chromobj != NULL:
+            if sameString(cChrom, chromobj.name):
+                break
+            chromobj = chromobj.next
+        else:
+            raise KeyError("Chromosome not found: {}".format(bChrom.decode('utf-8')))
+
+        start = starts[i]
+        end = ends[i]
+        refStart = start
+        if start < 0:
+            start = 0
+
+        _fetch(out[i, :], bwf, chromobj.name, start, end, refStart, chromobj.size, missing, oob)
+
+    bbiChromInfoFreeList(&chromList)
+    bbiFileClose(&bwf)
+
+    return out
+
+
 def fetch(str inFile, str chrom, int start, int end, double missing=0.0, double oob=np.nan):
     """
     Fetch a BigWig interval at base pair resolution as a numpy array.
@@ -225,7 +281,3 @@ def fetch(str inFile, str chrom, int start, int end, double missing=0.0, double 
     bbiFileClose(&bwf)
 
     return out
-
-
-#def pileup(str infile, pd.DataFrame bed, double missing=0.0, double oob=np.nan):
-#    pass
