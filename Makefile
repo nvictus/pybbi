@@ -1,4 +1,6 @@
-.PHONY: all build clean clean-py clean-c libkent
+.PHONY: all build clean clean-py clean-c
+
+current_dir = $(shell pwd)
 
 ifeq (${MACHTYPE},)
     MACHTYPE:=$(shell uname -m)
@@ -14,29 +16,24 @@ export MACHTYPE
 export CC=gcc
 export COPTS=-g -pthread -fPIC -static
 export CFLAGS=-Wall
-export LDFLAGS=-L/net/proteome/home/nezar/local/devel/bbifile/pykent/lib -L/usr/lib -lz -lc -lpthread
-export INC=-I/net/proteome/home/nezar/local/devel/bbifile/pykent/include -I/net/proteome/home/nezar/local/devel/bbifile/pykent/src -I/usr/include
+export LDFLAGS=-L${current_dir}/src/${MACHTYPE} -L/usr/lib -lz -lc -lpthread
+export INC=-I${current_dir}/include -I${current_dir}/src -I/usr/include
 export DEFS=-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_GNU_SOURCE -DMACHTYPE_${MACHTYPE}
 
 
 all: build
 
-build: lib/$(MACHTYPE)/libkent.a
+build: src/$(MACHTYPE)/libkent.a
 	python setup.py build_ext --inplace
 
-lib/$(MACHTYPE)/libkent.a: libkent
-	mkdir -p lib/$(MACHTYPE)
-	ar rcus lib/$(MACHTYPE)/libkent.a src/*.o
-
-libkent:
+src/$(MACHTYPE)/libkent.a:
 	cd src && $(MAKE)
 
 clean-c:
-	rm -f lib/$(MACHTYPE)/libkent.a	
-	cd src && rm -f *.o
+	cd src && ${MAKE} clean
 
 clean-py:
-	rm pykent/kent.c pykent/*.so
+	rm kent/*.c kent/*.so
 	rm -rf build
 
 clean: clean-py clean-c

@@ -13,7 +13,7 @@ ext_modules = [
         name='kent.bbi', 
         sources=['kent/bbi.pyx'],
         library_dirs=[
-            op.join(thisdir, 'lib/x86_64'),
+            op.join(thisdir, 'src/x86_64'),
         ],
         libraries=[
             'kent',
@@ -21,7 +21,7 @@ ext_modules = [
         include_dirs=[
             np.get_include(),
             op.join(thisdir, 'include'),
-            op.join(thisdir, 'src'),
+            #op.join(thisdir, 'src'),
         ],
     ),
 ]

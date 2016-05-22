@@ -12,21 +12,21 @@
 #include "localmem.h"
 
 
-// struct lm
-//     {
-//     struct lmBlock *blocks;
-//     size_t blockSize;
-//     size_t allignMask;
-//     size_t allignAdd;
-//     };
+struct lm
+    {
+    struct lmBlock *blocks;
+    size_t blockSize;
+    size_t allignMask;
+    size_t allignAdd;
+    };
 
-// struct lmBlock
-//     {
-//     struct lmBlock *next;
-//     char *free;
-//     char *end;
-//     char *extra;
-//     };
+struct lmBlock
+    {
+    struct lmBlock *next;
+    char *free;
+    char *end;
+    char *extra;
+    };
 
 static struct lmBlock *newBlock(struct lm *lm, size_t reqSize)
 /* Allocate a new block of at least reqSize */

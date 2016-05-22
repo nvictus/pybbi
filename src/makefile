@@ -1,8 +1,11 @@
+#include ../inc/localEnvironment.mk
+#include ../inc/common.mk
+
 O = aliType.o annoAssembly.o annoFilter.o annoFormatter.o annoFormatTab.o \
     annoGrator.o annoGrateWig.o annoGratorQuery.o annoOption.o annoRow.o \
     annoStreamer.o annoStreamBigBed.o annoStreamBigWig.o annoStreamTab.o annoStreamVcf.o \
     apacheLog.o asParse.o axt.o axtAffine.o bamFile.o base64.o \
-    basicBed.o bbiRead.o bbiWrite.o bigBed.o binRange.o bits.o \
+    basicBed.o bbiRead.o bbiWrite.o bedTabix.o bigBed.o binRange.o bits.o \
     blastOut.o blastParse.o boxClump.o boxLump.o bPlusTree.o \
     bwgCreate.o bwgQuery.o bwgValsOnChrom.o \
     cda.o chain.o chainBlock.o chainConnect.o chainToAxt.o chainToPsl.o \
@@ -45,7 +48,23 @@ O = aliType.o annoAssembly.o annoFilter.o annoFormatter.o annoFormatTab.o \
     wildcmp.o wormdna.o \
     xAli.o xa.o xap.o xenshow.o xmlEscape.o xp.o zlibFace.o
 
+$(MACHTYPE)/libkent.a: $(O) $(MACHTYPE)
+	ar rcus $(MACHTYPE)/libkent.a $(O)
+
+$(MACHTYPE):
+	mkdir $(MACHTYPE)
+
+test:
+	cd tests && ${MAKE} test
+
+clean:
+	rm -f ${O} $(MACHTYPE)/libkent.a
+	cd tests && ${MAKE} clean
+
+tags:
+	etags ../inc/*.h ../lib/*.h ../lib/*.c  ../hg/inc/*.h ../hg/lib/*.h ../hg/lib/*.c ../hg/hgTracks/*.c ../hg/hgc/*.c ../hg/hgTrackUi/*.c
+
 %.o: %.c
 	${CC} ${COPTS} ${CFLAGS} ${DEFS} ${LDFLAGS} ${INC} -o $@ -c $<
 
-all: $(O)
+all: $(MACHTYPE)/libkent.a

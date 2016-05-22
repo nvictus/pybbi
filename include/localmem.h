@@ -10,24 +10,6 @@
 #ifndef LOCALMEM_H
 #define LOCALMEM_H
 
-
-struct lm
-    {
-    struct lmBlock *blocks;
-    size_t blockSize;
-    size_t allignMask;
-    size_t allignAdd;
-    };
-
-struct lmBlock
-    {
-    struct lmBlock *next;
-    char *free;
-    char *end;
-    char *extra;
-    };
-
-
 struct lm *lmInit(int blockSize);
 /* Create a local memory pool. Parameters are:
  *      blockSize - how much system memory to allocate at a time.  Can

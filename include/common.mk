@@ -1,7 +1,7 @@
 CC=gcc
 # to build on sundance: CC=gcc -mcpu=v9 -m64
 ifeq (${COPT},)
-    COPT=-O -g -fPIC
+    COPT=-O -g
 endif
 ifeq (${CFLAGS},)
     CFLAGS=
@@ -17,7 +17,7 @@ ifneq (,$(findstring -,$(MACHTYPE)))
 endif
 
 HG_DEFS=-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_GNU_SOURCE -DMACHTYPE_${MACHTYPE}
-HG_INC+=-I../include -I../../include -I../../../include -I../../../../include -I../../../../../include
+HG_INC+=-I../inc -I../../inc -I../../../inc -I../../../../inc -I../../../../../inc
 
 # to check for Mac OSX Darwin specifics:
 UNAME_S := $(shell uname -s)
