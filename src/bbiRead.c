@@ -459,7 +459,7 @@ el->sumSquares = sumSquares * normFactor;
 return validCount;
 }
 
-static bits32 bbiSummarySlice(struct bbiFile *bbi, bits32 baseStart, bits32 baseEnd, 
+bits32 bbiSummarySlice(struct bbiFile *bbi, bits32 baseStart, bits32 baseEnd, 
 	struct bbiSummary *sumList, struct bbiSummaryElement *el)
 /* Update retVal with the average value if there is any data in interval.  Return number
  * of valid data bases in interval. */
@@ -496,7 +496,7 @@ if (sumList != NULL)
 return validCount;
 }
 
-static int bbiChromId(struct bbiFile *bbi, char *chrom)
+int bbiChromId(struct bbiFile *bbi, char *chrom)
 /* Return chromosome Id */
 {
 struct bbiChromIdSize idSize;
@@ -543,7 +543,7 @@ if (sumList != NULL)
 return result;
 }
 
-static bits32 bbiIntervalSlice(struct bbiFile *bbi, bits32 baseStart, bits32 baseEnd, 
+bits32 bbiIntervalSlice(struct bbiFile *bbi, bits32 baseStart, bits32 baseEnd, 
 	struct bbiInterval *intervalList, struct bbiSummaryElement *el)
 /* Update retVal with the average value if there is any data in interval.  Return number
  * of valid data bases in interval. */
