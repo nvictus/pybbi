@@ -4,8 +4,6 @@ cimport numpy as np
 from libc.stdio cimport FILE
 
 
-# External C declarations ------------------------------------------------------
-
 cdef extern from "common.h":
     ctypedef np.int32_t boolean
     ctypedef np.uint16_t bits16
@@ -28,11 +26,6 @@ cdef extern from "localmem.h":
 
     lm *lmInit(int blockSize)
     void lmCleanup(lm **pLm)
-
-
-cdef extern from "udc.h":
-    cdef struct udcFile:
-        pass
 
 
 cdef extern from "bPlusTree.h":
@@ -63,6 +56,16 @@ cdef extern from "crTree.h":
         bits32 endBase
         bits64 fileSize
         bits32 itemsPerSlot
+
+
+cdef extern from "udc.h":
+    cdef struct udcFile:
+        pass
+
+
+cdef extern from "sig.h": 
+    bits32 bigWigSig
+    bits32 bigBedSig
 
 
 cdef extern from "bbiFile.h":
@@ -139,8 +142,10 @@ cdef extern from "bbiFile.h":
         bits32 end, 
         lm *lm)
 
-    bbiChromInfo *bbiChromList(bbiFile *bbi)
+    bbiFile *bbiFileOpen(char *fileName, bits32 sig, char *typeName)
     void bbiFileClose(bbiFile **pBwf)
+    boolean bbiFileCheckSigs(char *fileName, bits32 sig, char *typeName)
+    bbiChromInfo *bbiChromList(bbiFile *bbi)
     void bbiChromInfoFreeList(bbiChromInfo **pList)
     bbiZoomLevel *bbiBestZoom(
         bbiZoomLevel *levelList,
@@ -213,6 +218,15 @@ cdef extern from "bbiFile.h":
         bbiSummary *sumList,
         bbiSummaryElement *el)
 
+    # Functions that were declared static (private) in bigBed.c
+    # Source was modified to expose them here via bbiFile.h
+    bbiInterval *bigBedCoverageIntervals(
+        bbiFile *bbi,
+        char *chrom, 
+        bits32 start, 
+        bits32 end,
+        lm *lm)
+
 
 cdef extern from "bigWig.h":
     boolean isBigWig(char *fileName)
@@ -246,4 +260,43 @@ cdef extern from "bigWig.h":
         int summarySize, 
         bbiSummaryElement *summary)    
 
-#-------------------------------------------------------------------------------
+
+cdef extern from "bigBed.h":
+    cdef struct bigBedInterval:
+        bigBedInterval *next
+        bits32 start, end
+        char *rest
+        bits32 chromId
+
+    bbiFile *bigBedFileOpen(char *fileName)
+    #void bigBedFileClose(bbiFile **pBwf)
+    bits64 bigBedItemCount(bbiFile *bbi)
+    bigBedInterval *bigBedIntervalQuery(
+        bbiFile *bbi, 
+        char *chrom,
+        bits32 start, 
+        bits32 end, 
+        int maxItems,
+        lm *lm)
+    int bigBedIntervalToRow(
+        bigBedInterval *interval, 
+        char *chrom, 
+        char *startBuf, 
+        char *endBuf,
+        char **row, 
+        int rowSize)
+    boolean bigBedSummaryArray(
+        bbiFile *bbi, 
+        char *chrom, 
+        bits32 start, 
+        bits32 end,
+        bbiSummaryType summaryType, 
+        int summarySize, 
+        double *summaryValues)
+    boolean bigBedSummaryArrayExtended(
+        bbiFile *bbi, 
+        char *chrom, 
+        bits32 start, 
+        bits32 end,
+        int summarySize,
+        bbiSummaryElement *summary);

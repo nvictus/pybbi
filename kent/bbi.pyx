@@ -1,11 +1,202 @@
 #!python
 #cython: embedsignature=True
 from __future__ import division, print_function
+from six.moves.urllib.request import urlopen
+from six.moves.urllib.parse import urlparse
+from collections import OrderedDict
+import os.path
+
 import numpy as np
 import cython
 
 
-def fetch(str inFile,
+cdef inline char *cstring_encode(str text, str encoding='ascii'):
+    cdef bytes bText = text.encode(encoding)
+    cdef char *cText = bText
+    return cText
+
+
+cdef inline str cstring_decode(char *cText, str encoding='ascii'):
+    cdef bytes bText = cText
+    cdef str text = bText.decode(encoding)
+    return text
+
+
+def _is_url(str uri):
+    return urlparse(uri).scheme != ""
+
+
+def _read_magic(str uri):
+    cdef bytes magic_bytes
+    if not _is_url(uri):
+        if not os.path.isfile(uri):
+            raise OSError("File not found: {}".format(uri))
+        with open(uri, 'rb') as f:
+            magic_bytes = f.read(4)
+    else:
+        with urlopen(uri) as r:
+            code = r.getcode()
+            if code >= 400:
+                raise OSError("Status {}: Couldn't open {}".format(code, uri))
+            magic_bytes = r.read(4)
+    return magic_bytes
+
+
+def _check_sig(str uri):
+    magic_bytes = _read_magic(uri)
+    if (int.from_bytes(magic_bytes, 'little') == bigWigSig or
+        int.from_bytes(magic_bytes, 'big') == bigWigSig):
+        return bigWigSig
+    elif (int.from_bytes(magic_bytes, 'little') == bigBedSig or
+          int.from_bytes(magic_bytes, 'big') == bigBedSig):
+        return bigBedSig
+    else:
+        return 0
+
+
+def is_bbi(str inFile):
+    return _check_sig(inFile) > 0
+
+
+def is_bigwig(str inFile):
+    return _check_sig(inFile) == bigWigSig
+
+
+def is_bigbed(str inFile):
+    return _check_sig(inFile) == bigBedSig
+
+
+def chromsizes(str inFile):
+    """
+    Fetch the chromosome list of a bbi file. Returns an ordered dictionary of
+    chromosome names mapped to their sizes in bp.
+
+    Parameters
+    ----------
+    inFile : str
+        Path to BigWig or BigBed file.
+
+    Returns
+    -------
+    OrderedDict (str -> int)
+
+    """
+    cdef bits32 sig = _check_sig(inFile)
+    cdef char *cInFile = cstring_encode(inFile, 'utf-8')
+    cdef bbiFile *bbi
+    cdef BbiFetchIntervals fetcher
+    if sig == bigWigSig:
+        bbi = bigWigFileOpen(cInFile)
+    elif sig == bigBedSig:
+        bbi = bigBedFileOpen(cInFile)
+    else:
+        raise OSError("Not a bbi file: {}".format(inFile))
+    cdef bbiChromInfo *chromList = bbiChromList(bbi)
+    cdef bbiChromInfo *info = chromList 
+    cdef list c_list = []
+    while info != NULL:
+        c_list.append( (cstring_decode(info.name, 'ascii'), info.size) )
+        info = info.next
+    bbiChromInfoFreeList(&chromList)
+    return OrderedDict(c_list)
+
+
+def fetch_intervals(
+        str inFile,
+        str chrom, 
+        int start, 
+        int end):
+    """
+    Return a generator that iterates over the records of data intervals in a bbi
+    file overlapping a specified genomic query interval.
+
+    Parameters
+    ----------
+    inFile : str
+        Path to BigWig or BigBed file.
+    chrom : str
+        Chromosome name.
+    start : int
+        Start coordinate.
+    end : int
+        End coordinate. If end is less than zero, the end is set to the
+        chromosome size.
+
+    Yields
+    ------
+    tuple
+        bedGraph or BED record
+
+    """
+    # open the file
+    cdef bits32 sig = _check_sig(inFile)
+    cdef char *cInFile = cstring_encode(inFile, 'utf-8')
+    cdef bbiFile *bbi
+    cdef BbiFetchIntervals fetcher
+    if sig == bigWigSig:
+        bbi = bigWigFileOpen(cInFile)
+    elif sig == bigBedSig:
+        bbi = bigBedFileOpen(cInFile)
+    else:
+        raise OSError("Not a bbi file: {}".format(inFile))
+
+    # find the chromosome
+    cdef char *cChrom = cstring_encode(chrom, 'ascii')
+    cdef bbiChromInfo *chromList
+    cdef bbiChromInfo *chromobj
+    chromList = chromobj = bbiChromList(bbi)
+    while chromobj != NULL:
+        if sameString(cChrom, chromobj.name):
+            break
+        chromobj = chromobj.next
+    else:
+        raise KeyError("Chromosome not found: {}".format(chrom))
+
+    # check the coordinate inputs
+    cdef int refStart, length
+    refStart = start
+    if start < 0:
+        start = 0
+    if end < 0:
+        end = chromobj.size
+    length = end - refStart
+    if length < 0:
+        raise ValueError(
+            "Interval cannot have negative length:"
+            " start = {}, end = {}.".format(start, end))
+
+    # query
+    cdef lm *lm = lmInit(0)
+    cdef bbiInterval *bwInterval
+    cdef bigBedInterval *bbInterval
+    cdef tuple restTup
+    cdef char *cRest
+    cdef str rest
+    if sig == bigWigSig:
+        bwInterval = bigWigIntervalQuery(bbi, cChrom, start, end, lm)
+        while bwInterval != NULL:
+            yield (chrom, bwInterval.start, bwInterval.end, bwInterval.val)
+            bwInterval = bwInterval.next
+    else:
+        bbInterval = bigBedIntervalQuery(bbi, cChrom, start, end, 0, lm)
+        while bbInterval != NULL:
+            cRest = bbInterval.rest
+            if cRest != NULL:
+                rest = cstring_decode(cRest, 'ascii')
+                restTup = tuple(rest.split('\t'))
+            else:
+                restTup = ()
+            yield (chrom, bbInterval.start, bbInterval.end) + restTup
+            bbInterval = bbInterval.next
+
+    # clean up
+    lmCleanup(&lm)
+    bbiChromInfoFreeList(&chromList)
+    bbiFileClose(&bbi)
+
+
+def fetch(
+        str inFile,
         str chrom, 
         int start, 
         int end, 
@@ -13,7 +204,12 @@ def fetch(str inFile,
         double missing=0.0, 
         double oob=np.nan):
     """
-    Fetch a BigWig interval at base pair resolution as a numpy array.
+    Read the signal data in a bbi file overlapping a genomic query interval into
+    a numpy array. 
+
+    If a number of bins is requested, this will interpolate the file's stored
+    "summary" data at the closest available zoom level. Otherwise, the data
+    is returned at base pair resolution (default).
 
     Parameters
     ----------
@@ -29,7 +225,8 @@ def fetch(str inFile,
         chromosome size. If end is greater than the chromosome size, the end of
         the track is not truncated but treated as out of bounds.
     bins : int
-        Number of bins to summarize the data. Default (-1) means no aggregation.
+        Number of bins to divide the query interval into for coarse graining. 
+        Default (-1) means no coarse graining (i.e., 1 bp bins).
     missing : float
         Fill-in value for unreported data in valid regions. Default is 0.
     oob : float
@@ -39,19 +236,31 @@ def fetch(str inFile,
     -------
     out : 1D ndarray
 
+    Notes
+    -----
+    * The signal data for a BigBed file is its coverage.
+    * Currently, the only summary statistic supported is 'mean'.
+
     """
-    cdef bytes bInFile = inFile.encode('utf-8')
-    cdef char *cInFile = bInFile
-    cdef bytes bChrom = chrom.encode('utf-8')
-    cdef char *cChrom = bChrom
-    cdef bbiFile *bwf = bigWigFileOpen(cInFile)
+    # open the file
+    cdef bits32 sig = _check_sig(inFile)
+    cdef char *cInFile = cstring_encode(inFile, 'utf-8')
+    cdef bbiFile *bbi
+    cdef BbiFetchIntervals fetcher
+    if sig == bigWigSig:
+        bbi = bigWigFileOpen(cInFile)
+        fetcher = bigWigIntervalQuery
+    elif sig == bigBedSig:
+        bbi = bigBedFileOpen(cInFile)
+        fetcher = bigBedCoverageIntervals
+    else:
+        raise OSError("Not a bbi file: {}".format(inFile))
+
+    # find the chromosome
+    cdef char *cChrom = cstring_encode(chrom, 'ascii')
     cdef bbiChromInfo *chromList
     cdef bbiChromInfo *chromobj
-    cdef int refStart, length
-
-    cdef np.ndarray[np.double_t, ndim=1] out
-
-    chromList = chromobj = bbiChromList(bwf)
+    chromList = chromobj = bbiChromList(bbi)
     while chromobj != NULL:
         if sameString(cChrom, chromobj.name):
             break
@@ -59,40 +268,49 @@ def fetch(str inFile,
     else:
         raise KeyError("Chromosome not found: {}".format(chrom))
 
+    # check the coordinate inputs
+    cdef int refStart, length
     refStart = start
     if start < 0:
         start = 0
     if end < 0:
         end = chromobj.size
     length = end - refStart
-
     if length < 0:
         raise ValueError(
             "Interval cannot have negative length:"
             " start = {}, end = {}.".format(start, end))
     
+    # prepare the output
+    cdef np.ndarray[np.double_t, ndim=1] out
+
     if bins < 1:
         bins = length
-    
+
     if missing == 0.0:
         out = np.zeros(bins, dtype=float)
     else:
         out = np.full(bins, fill_value=missing, dtype=float)
 
     if bins < 1:
-        bwFetchFull(out, bwf, chromobj.name, start, end, refStart,
-            chromobj.size, missing, oob)
+        _bbiFetchFull(
+            out, bbi, fetcher, 
+            chromobj.name, start, end, refStart, chromobj.size, 
+            missing, oob)
     else:
-        bwFetchSummarized(out, bwf, chromobj.name, start, end, refStart,
-            chromobj.size, bins, missing, oob)
+        _bbiFetchSummarized(
+            out, bbi, fetcher, 
+            chromobj.name, start, end, refStart, chromobj.size, 
+            bins, missing, oob)
 
     bbiChromInfoFreeList(&chromList)
-    bbiFileClose(&bwf)
+    bbiFileClose(&bbi)
 
     return out
 
 
-def stackup(str inFile, 
+def stackup(
+        str inFile, 
         chroms,
         starts,
         ends,
@@ -100,7 +318,7 @@ def stackup(str inFile,
         double missing=0.0,
         double oob=np.nan):
     """
-    Vertically stack equal-length bigwig intervals.
+    Vertically stack signal tracks from equal-length bbi query intervals.
 
     Parameters
     ----------
@@ -124,48 +342,60 @@ def stackup(str inFile,
 
     Returns
     -------
-    out : ndarray
+    out : 2D ndarray
+
+    See Also
+    --------
+    fetch : Fetch the signal track of a single interval
 
     """
     cdef np.ndarray[object, ndim=1] chroms_ = np.asarray(chroms, dtype=object)
     cdef np.ndarray[np.int_t, ndim=1] starts_ = np.asarray(starts, dtype=int)
     cdef np.ndarray[np.int_t, ndim=1] ends_ = np.asarray(ends, dtype=int)
     
-    cdef bytes bInFile = inFile.encode('utf-8')
-    cdef char *cInFile = bInFile
-    cdef bbiFile *bwf = bigWigFileOpen(cInFile)
-    
-    cdef int n = chroms_.shape[0]
-    cdef length = ends_[0] - starts_[0]
+    # open the file
+    cdef bits32 sig = _check_sig(inFile)
+    cdef char *cInFile = cstring_encode(inFile, 'utf-8')
+    cdef bbiFile *bbi
+    cdef BbiFetchIntervals fetcher
+    if sig == bigWigSig:
+        bbi = bigWigFileOpen(cInFile)
+        fetcher = bigWigIntervalQuery
+    elif sig == bigBedSig:
+        bbi = bigBedFileOpen(cInFile)
+        fetcher = bigBedCoverageIntervals
+    else:
+        raise OSError("Not a bbi file: {}".format(inFile))
 
-    cdef int start, end, refStart, i
-    cdef bbiChromInfo *chromList
-    cdef bbiChromInfo *chromobj
-    cdef bytes bChrom
-    cdef char *cChrom
-
+    # check the coordinate inputs
     if not len(np.unique(ends_ - starts_)) == 1:
         raise ValueError("Windows must have equal size")
-
+    
+    # prepare output
+    cdef int length = ends_[0] - starts_[0]
+    cdef int n = chroms_.shape[0]
     if bins < 1:
         bins = length
-        
     if missing == 0.0:
         out = np.zeros((n, bins), dtype=float)
     else:
         out = np.full((n, bins), fill_value=missing, dtype=float)
 
+    # query
+    cdef int start, end, refStart, i
+    cdef bbiChromInfo *chromList
+    cdef bbiChromInfo *chromobj
+    cdef char *cChrom
     for i in range(n):
-        bChrom = chroms_[i].encode('utf-8')
-        cChrom = bChrom
-        chromList = chromobj = bbiChromList(bwf)
+        cChrom = cstring_encode(chroms_[i], 'ascii')
+        chromList = chromobj = bbiChromList(bbi)
         while chromobj != NULL:
             if sameString(cChrom, chromobj.name):
                 break
             chromobj = chromobj.next
         else:
             raise KeyError(
-                "Chromosome not found: {}".format(bChrom.decode('utf-8')))
+                "Chromosome not found: {}".format(chroms_[i]))
 
         start = starts_[i]
         end = ends_[i]
@@ -174,21 +404,26 @@ def stackup(str inFile,
             start = 0
 
         if bins < 1:
-            bwFetchFull(out[i, :], bwf, chromobj.name, start, end, refStart,
-                chromobj.size, missing, oob)
+            _bbiFetchFull(
+                out[i, :], bbi, fetcher, 
+                chromobj.name, start, end, refStart, chromobj.size, 
+                missing, oob)
         else:
-            bwFetchSummarized(out[i, :], bwf, chromobj.name, start, end,
-                refStart, chromobj.size, bins, missing, oob)
+            _bbiFetchSummarized(
+                out[i, :], bbi, fetcher, 
+                chromobj.name, start, end, refStart, chromobj.size, 
+                bins, missing, oob)
             
     bbiChromInfoFreeList(&chromList)
-    bbiFileClose(&bwf)
+    bbiFileClose(&bbi)
 
     return out
 
 
-cdef inline void bwFetchFull(
+cdef inline void _bbiFetchFull(
         np.ndarray[np.double_t, ndim=1] out, 
         bbiFile *bwf, 
+        BbiFetchIntervals fetchIntervals,
         char *chromName, 
         int start,
         int end,
@@ -205,8 +440,7 @@ cdef inline void bwFetchFull(
     cdef double saveVal
 
     lm = lmInit(0)
-    intervalList = interval = bigWigIntervalQuery(
-        bwf, chromName, start, end, lm)
+    intervalList = interval = fetchIntervals(bwf, chromName, start, end, lm)
     firstTime = True
     saveStart = -1
     prevEnd = -1
@@ -234,9 +468,10 @@ cdef inline void bwFetchFull(
     lmCleanup(&lm)
 
 
-cdef inline void bwFetchSummarized(
+cdef inline void _bbiFetchSummarized(
         np.ndarray[np.double_t, ndim=1] out, 
         bbiFile *bwf, 
+        BbiFetchIntervals fetchIntervals,
         char *chromName, 
         int start,
         int end,
@@ -261,17 +496,17 @@ cdef inline void bwFetchSummarized(
     # Populate summary elements
     cdef boolean result = False
     if zoomObj != NULL:
-        result = _bbiSummarizeFromZoom(zoomObj, bwf, chromName, start, end,
+        result = _bbiSummarizedFromZoom(zoomObj, bwf, chromName, start, end,
             refStart, nbins, elements)
     else:
-        result = _bbiSummarizeFromFull(bwf, chromName, start, end, refStart,
-            nbins, bigWigIntervalQuery, elements)
+        result = _bbiSummarizedFromFull(bwf, chromName, start, end, refStart,
+            nbins, fetchIntervals, elements)
 
-    # Fill array
+    # Fill output array
+    cdef summaryType = bbiSumMean  # Just support mean for now
     cdef double covFactor = <double>nbins / (end - start)
     cdef bbiSummaryElement *el
     cdef double val
-    cdef summaryType = bbiSumMean
     cdef int i
     if result:
         for i in range(nbins):
@@ -295,7 +530,7 @@ cdef inline void bwFetchSummarized(
     freeMem(elements)    
 
 
-cdef boolean _bbiSummarizeFromZoom(
+cdef boolean _bbiSummarizedFromZoom(
        bbiZoomLevel *zoom,
        bbiFile *bbi, 
        char *chrom, 
@@ -343,7 +578,7 @@ cdef boolean _bbiSummarizeFromZoom(
     return result
 
 
-cdef boolean _bbiSummarizeFromFull(
+cdef boolean _bbiSummarizedFromFull(
         bbiFile *bbi, 
         char *chrom, 
         int start, 
