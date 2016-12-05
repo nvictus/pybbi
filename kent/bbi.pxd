@@ -2,6 +2,7 @@
 #cython: embedsignature=True
 cimport numpy as np
 from libc.stdio cimport FILE
+from libc.stdlib cimport free
 
 
 cdef extern from "common.h":
@@ -145,6 +146,7 @@ cdef extern from "bbiFile.h":
     bbiFile *bbiFileOpen(char *fileName, bits32 sig, char *typeName)
     void bbiFileClose(bbiFile **pBwf)
     boolean bbiFileCheckSigs(char *fileName, bits32 sig, char *typeName)
+    bits32 bbiChromSize(bbiFile *bbi, char *chrom)
     bbiChromInfo *bbiChromList(bbiFile *bbi)
     void bbiChromInfoFreeList(bbiChromInfo **pList)
     bbiZoomLevel *bbiBestZoom(

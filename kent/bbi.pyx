@@ -10,18 +10,6 @@ import numpy as np
 import cython
 
 
-cdef inline char *cstring_encode(str text, str encoding='ascii'):
-    cdef bytes bText = text.encode(encoding)
-    cdef char *cText = bText
-    return cText
-
-
-cdef inline str cstring_decode(char *cText, str encoding='ascii'):
-    cdef bytes bText = cText
-    cdef str text = bText.decode(encoding)
-    return text
-
-
 def _is_url(str uri):
     return urlparse(uri).scheme != ""
 
@@ -55,14 +43,53 @@ def _check_sig(str uri):
 
 
 def is_bbi(str inFile):
+    """
+    Returns True if `inFile` is a path or URL to a big binary file.
+
+    Parameters
+    ----------
+    inFile : str
+        File path or URL
+
+    Returns
+    -------
+    bool
+
+    """
     return _check_sig(inFile) > 0
 
 
 def is_bigwig(str inFile):
+    """
+    Returns True if `inFile` is a path or URL to a BigWig binary file.
+
+    Parameters
+    ----------
+    inFile : str
+        File path or URL
+
+    Returns
+    -------
+    bool
+
+    """
     return _check_sig(inFile) == bigWigSig
 
 
 def is_bigbed(str inFile):
+    """
+    Returns True if `inFile` is a path or URL to a BigBed binary file.
+
+    Parameters
+    ----------
+    inFile : str
+        File path or URL
+
+    Returns
+    -------
+    bool
+
+    """
     return _check_sig(inFile) == bigBedSig
 
 
@@ -81,24 +108,71 @@ def chromsizes(str inFile):
     OrderedDict (str -> int)
 
     """
+    # open the file
     cdef bits32 sig = _check_sig(inFile)
-    cdef char *cInFile = cstring_encode(inFile, 'utf-8')
+    cdef bytes bInFile = inFile.encode('utf-8')
     cdef bbiFile *bbi
     cdef BbiFetchIntervals fetcher
     if sig == bigWigSig:
-        bbi = bigWigFileOpen(cInFile)
+        bbi = bigWigFileOpen(bInFile)
     elif sig == bigBedSig:
-        bbi = bigBedFileOpen(cInFile)
+        bbi = bigBedFileOpen(bInFile)
     else:
         raise OSError("Not a bbi file: {}".format(inFile))
+
+    # traverse the chromosome list
     cdef bbiChromInfo *chromList = bbiChromList(bbi)
     cdef bbiChromInfo *info = chromList 
     cdef list c_list = []
     while info != NULL:
-        c_list.append( (cstring_decode(info.name, 'ascii'), info.size) )
+        c_list.append( (<bytes>(info.name).decode('ascii'), info.size) )
         info = info.next
+    
+    # clean up
     bbiChromInfoFreeList(&chromList)
+    bbiFileClose(&bbi)
+
     return OrderedDict(c_list)
+
+
+def zooms(str inFile):
+    """
+    Fetch the zoom levels of a bbi file. Returns a list of "reduction levels",
+    i.e. the number of bases per summary item, i.e. the bin size.
+
+    Parameters
+    ----------
+    inFile : str
+        Path to BigWig or BigBed file.
+
+    Returns
+    -------
+    list of int
+
+    """
+    # open the file
+    cdef bits32 sig = _check_sig(inFile)
+    cdef bytes bInFile = inFile.encode('utf-8')
+    cdef bbiFile *bbi
+    cdef BbiFetchIntervals fetcher
+    if sig == bigWigSig:
+        bbi = bigWigFileOpen(bInFile)
+    elif sig == bigBedSig:
+        bbi = bigBedFileOpen(bInFile)
+    else:
+        raise OSError("Not a bbi file: {}".format(inFile))
+
+    # traverse the zoom list
+    cdef bbiZoomLevel *zoom = bbi.levelList
+    cdef list z_list = []
+    while zoom != NULL:
+        z_list.append( zoom.reductionLevel )
+        zoom = zoom.next
+    
+    # clean up
+    bbiFileClose(&bbi)
+
+    return z_list
 
 
 def fetch_intervals(
@@ -130,59 +204,61 @@ def fetch_intervals(
     """
     # open the file
     cdef bits32 sig = _check_sig(inFile)
-    cdef char *cInFile = cstring_encode(inFile, 'utf-8')
+    cdef bytes bInFile = inFile.encode('utf-8')
     cdef bbiFile *bbi
     cdef BbiFetchIntervals fetcher
     if sig == bigWigSig:
-        bbi = bigWigFileOpen(cInFile)
+        bbi = bigWigFileOpen(bInFile)
     elif sig == bigBedSig:
-        bbi = bigBedFileOpen(cInFile)
+        bbi = bigBedFileOpen(bInFile)
     else:
         raise OSError("Not a bbi file: {}".format(inFile))
 
     # find the chromosome
-    cdef char *cChrom = cstring_encode(chrom, 'ascii')
-    cdef bbiChromInfo *chromList
-    cdef bbiChromInfo *chromobj
-    chromList = chromobj = bbiChromList(bbi)
-    while chromobj != NULL:
-        if sameString(cChrom, chromobj.name):
-            break
-        chromobj = chromobj.next
-    else:
+    cdef bytes chromName = chrom.encode('ascii')
+    cdef int chromSize = bbiChromSize(bbi, chromName)
+    if chromSize == 0:
         raise KeyError("Chromosome not found: {}".format(chrom))
 
-    # check the coordinate inputs
-    cdef int refStart, length
-    refStart = start
-    if start < 0:
-        start = 0
+    # check the coordinates
     if end < 0:
-        end = chromobj.size
-    length = end - refStart
+        end = chromSize
+    if start > chromSize:
+        raise ValueError(
+            "Start exceeds the chromosome length, {}.".format(chromSize))
+    cdef length = end - start
     if length < 0:
         raise ValueError(
             "Interval cannot have negative length:"
             " start = {}, end = {}.".format(start, end))
+
+    # clip the query range
+    cdef int validStart = start, validEnd = end
+    if start < 0:
+        validStart = 0
+    if end > chromSize:
+        validEnd = chromSize
 
     # query
     cdef lm *lm = lmInit(0)
     cdef bbiInterval *bwInterval
     cdef bigBedInterval *bbInterval
     cdef tuple restTup
-    cdef char *cRest
+    cdef char *cRest = NULL
+    cdef bytes bRest
     cdef str rest
     if sig == bigWigSig:
-        bwInterval = bigWigIntervalQuery(bbi, cChrom, start, end, lm)
+        bwInterval = bigWigIntervalQuery(bbi, chromName, validStart, validEnd, lm)
         while bwInterval != NULL:
             yield (chrom, bwInterval.start, bwInterval.end, bwInterval.val)
             bwInterval = bwInterval.next
     else:
-        bbInterval = bigBedIntervalQuery(bbi, cChrom, start, end, 0, lm)
-        while bbInterval != NULL:
+        bbInterval = bigBedIntervalQuery(bbi, chromName, validStart, validEnd, 0, lm)
+        while bbInterval != NULL: 
             cRest = bbInterval.rest
             if cRest != NULL:
-                rest = cstring_decode(cRest, 'ascii')
+                bRest = cRest
+                rest = bRest.decode('ascii')
                 restTup = tuple(rest.split('\t'))
             else:
                 restTup = ()
@@ -190,8 +266,9 @@ def fetch_intervals(
             bbInterval = bbInterval.next
 
     # clean up
+    if cRest != NULL:
+        free(cRest)
     lmCleanup(&lm)
-    bbiChromInfoFreeList(&chromList)
     bbiFileClose(&bbi)
 
 
@@ -244,66 +321,56 @@ def fetch(
     """
     # open the file
     cdef bits32 sig = _check_sig(inFile)
-    cdef char *cInFile = cstring_encode(inFile, 'utf-8')
+    cdef bytes bInFile = inFile.encode('utf-8')
     cdef bbiFile *bbi
     cdef BbiFetchIntervals fetcher
     if sig == bigWigSig:
-        bbi = bigWigFileOpen(cInFile)
+        bbi = bigWigFileOpen(bInFile)
         fetcher = bigWigIntervalQuery
     elif sig == bigBedSig:
-        bbi = bigBedFileOpen(cInFile)
+        bbi = bigBedFileOpen(bInFile)
         fetcher = bigBedCoverageIntervals
     else:
         raise OSError("Not a bbi file: {}".format(inFile))
 
     # find the chromosome
-    cdef char *cChrom = cstring_encode(chrom, 'ascii')
-    cdef bbiChromInfo *chromList
-    cdef bbiChromInfo *chromobj
-    chromList = chromobj = bbiChromList(bbi)
-    while chromobj != NULL:
-        if sameString(cChrom, chromobj.name):
-            break
-        chromobj = chromobj.next
-    else:
+    cdef bytes chromName = chrom.encode('ascii')
+    cdef int chromSize = bbiChromSize(bbi, chromName)
+    if chromSize == 0:
         raise KeyError("Chromosome not found: {}".format(chrom))
 
-    # check the coordinate inputs
-    cdef int refStart, length
-    refStart = start
-    if start < 0:
-        start = 0
+    # check the coordinates
     if end < 0:
-        end = chromobj.size
-    length = end - refStart
+        end = chromSize
+    if start > chromSize:
+        raise ValueError(
+            "Start exceeds the chromosome length, {}.".format(chromSize))
+    cdef length = end - start
     if length < 0:
         raise ValueError(
             "Interval cannot have negative length:"
             " start = {}, end = {}.".format(start, end))
     
     # prepare the output
-    cdef np.ndarray[np.double_t, ndim=1] out
-
+    cdef boolean summary = True
     if bins < 1:
+        summary = False
         bins = length
 
-    if missing == 0.0:
-        out = np.zeros(bins, dtype=float)
-    else:
-        out = np.full(bins, fill_value=missing, dtype=float)
+    cdef np.ndarray[np.double_t, ndim=1] out = np.empty(bins, dtype=float)
+    out[:] = missing
 
-    if bins < 1:
-        _bbiFetchFull(
-            out, bbi, fetcher, 
-            chromobj.name, start, end, refStart, chromobj.size, 
-            missing, oob)
+    # query
+    if summary:
+        array_query_summarized(
+            out, bins, bbi, fetcher, 
+            chromName, start, end, chromSize, oob)
     else:
-        _bbiFetchSummarized(
-            out, bbi, fetcher, 
-            chromobj.name, start, end, refStart, chromobj.size, 
-            bins, missing, oob)
+        array_query_full(
+            out, bins, bbi, fetcher, 
+            chromName, start, end, chromSize, oob)
 
-    bbiChromInfoFreeList(&chromList)
+    # clean up
     bbiFileClose(&bbi)
 
     return out
@@ -352,215 +419,221 @@ def stackup(
     cdef np.ndarray[object, ndim=1] chroms_ = np.asarray(chroms, dtype=object)
     cdef np.ndarray[np.int_t, ndim=1] starts_ = np.asarray(starts, dtype=int)
     cdef np.ndarray[np.int_t, ndim=1] ends_ = np.asarray(ends, dtype=int)
+    if len(chroms_) != len(starts_) or len(starts_) != len(ends_):
+        raise ValueError(
+            "`chroms`, `starts`, and `ends` must have the same length")
     
     # open the file
     cdef bits32 sig = _check_sig(inFile)
-    cdef char *cInFile = cstring_encode(inFile, 'utf-8')
+    cdef bytes bInFile = inFile.encode('utf-8')
     cdef bbiFile *bbi
     cdef BbiFetchIntervals fetcher
     if sig == bigWigSig:
-        bbi = bigWigFileOpen(cInFile)
+        bbi = bigWigFileOpen(bInFile)
         fetcher = bigWigIntervalQuery
     elif sig == bigBedSig:
-        bbi = bigBedFileOpen(cInFile)
+        bbi = bigBedFileOpen(bInFile)
         fetcher = bigBedCoverageIntervals
     else:
         raise OSError("Not a bbi file: {}".format(inFile))
 
     # check the coordinate inputs
     if not len(np.unique(ends_ - starts_)) == 1:
-        raise ValueError("Windows must have equal size")
+        raise ValueError("Query windows must have equal size")
     
     # prepare output
     cdef int length = ends_[0] - starts_[0]
     cdef int n = chroms_.shape[0]
     if bins < 1:
         bins = length
-    if missing == 0.0:
-        out = np.zeros((n, bins), dtype=float)
-    else:
-        out = np.full((n, bins), fill_value=missing, dtype=float)
+    cdef np.ndarray[np.double_t, ndim=2] out = np.empty((n, bins), dtype=float)
+    out[:, :] = missing
 
     # query
-    cdef int start, end, refStart, i
-    cdef bbiChromInfo *chromList
-    cdef bbiChromInfo *chromobj
-    cdef char *cChrom
+    cdef bytes chromName
+    cdef int chromSize
+    cdef int start, end
+    cdef Py_ssize_t i
     for i in range(n):
-        cChrom = cstring_encode(chroms_[i], 'ascii')
-        chromList = chromobj = bbiChromList(bbi)
-        while chromobj != NULL:
-            if sameString(cChrom, chromobj.name):
-                break
-            chromobj = chromobj.next
-        else:
-            raise KeyError(
-                "Chromosome not found: {}".format(chroms_[i]))
-
+        chromName = chroms_[i].encode('ascii')
+        chromSize = bbiChromSize(bbi, chromName)
+        if chromSize == 0:
+            raise KeyError("Chromosome not found: {}".format(chroms_[i]))
         start = starts_[i]
         end = ends_[i]
-        refStart = start
-        if start < 0:
-            start = 0
-
+        if start > chromSize:
+            raise ValueError(
+                "Start exceeds the chromosome length, {}.".format(chromSize))
         if bins < 1:
-            _bbiFetchFull(
-                out[i, :], bbi, fetcher, 
-                chromobj.name, start, end, refStart, chromobj.size, 
-                missing, oob)
+            array_query_full(
+                out[i, :], bins, bbi, fetcher, 
+                chromName, start, end, chromSize, oob)
         else:
-            _bbiFetchSummarized(
-                out[i, :], bbi, fetcher, 
-                chromobj.name, start, end, refStart, chromobj.size, 
-                bins, missing, oob)
+            array_query_summarized(
+                out[i, :], bins, bbi, fetcher, 
+                chromName, start, end, chromSize, oob)
             
-    bbiChromInfoFreeList(&chromList)
+    # clean up
     bbiFileClose(&bbi)
 
     return out
 
 
-cdef inline void _bbiFetchFull(
+cdef inline void array_query_full(
         np.ndarray[np.double_t, ndim=1] out, 
-        bbiFile *bwf, 
+        int nbins,
+        bbiFile *bbi, 
         BbiFetchIntervals fetchIntervals,
-        char *chromName, 
+        bytes chromName, 
         int start,
         int end,
-        int refStart,
         int chromSize,
-        double missing, 
         double oob):
-    
-    cdef bbiInterval *intervalList
-    cdef bbiInterval *interval
-    cdef lm *lm
-    cdef boolean firstTime
-    cdef int saveStart, prevEnd
-    cdef double saveVal
 
-    lm = lmInit(0)
-    intervalList = interval = fetchIntervals(bwf, chromName, start, end, lm)
-    firstTime = True
-    saveStart = -1
-    prevEnd = -1
-    saveVal = -1.0
+    # Clip the query range
+    cdef int validStart = start, validEnd = end
+    if start < 0:
+        validStart = 0
+    if end > chromSize:
+        validEnd = chromSize
+
+    # Fill valid regions
+    cdef lm *lm = lmInit(0)
+    cdef bbiInterval *intervalList = fetchIntervals(
+        bbi, chromName, validStart, validEnd, lm)
+
+    cdef:
+        boolean firstTime = True
+        int saveStart = -1
+        int prevEnd = -1
+        double saveVal = -1.0
+        bbiInterval *interval = intervalList
     while interval != NULL:
         if firstTime:
             saveStart = interval.start
             saveVal = interval.val
             firstTime = False
         elif not ( (interval.start == prevEnd) and (interval.val == saveVal) ):
-            out[saveStart-refStart:prevEnd-refStart] = saveVal
+            out[saveStart-start:prevEnd-start] = saveVal
             saveStart = interval.start
             saveVal = interval.val
         prevEnd = interval.end
         interval = interval.next
-
     if not firstTime:
-        out[saveStart-refStart:prevEnd-refStart] = saveVal
+        out[saveStart-start:prevEnd-start] = saveVal
 
-    if refStart < start:
-        out[:(start-refStart)] = oob
-    if end >= chromSize:
-        out[(chromSize - refStart):] = oob
+    # Fill out-of-bounds regions
+    if start < validStart:
+        out[:(validStart - start)] = oob
+    if end >= validEnd:
+        out[(validEnd - start):] = oob
 
     lmCleanup(&lm)
 
 
-cdef inline void _bbiFetchSummarized(
+cdef inline void array_query_summarized(
         np.ndarray[np.double_t, ndim=1] out, 
-        bbiFile *bwf, 
-        BbiFetchIntervals fetchIntervals,
-        char *chromName, 
+        int nbins,
+        bbiFile *bbi, 
+        BbiFetchIntervals fetchIntervals, 
+        bytes chromName, 
         int start,
         int end,
-        int refStart,
         int chromSize,
-        int nbins,
-        double missing, 
         double oob):
     
+    # Clip the query range
+    cdef int validStart = start, validEnd = end
+    if start < 0:
+        validStart = 0
+    if end > chromSize:
+        validEnd = chromSize
+
     # Get the closest zoom level less than what we're looking for
-    cdef int baseSize = end - refStart
-    cdef int fullReduction = baseSize // nbins
-    cdef int zoomLevel = fullReduction // 2
+    cdef int baseSize = end - start
+    cdef int stepSize = baseSize // nbins
+    cdef int zoomLevel = stepSize // 2
     if zoomLevel < 0:
         zoomLevel = 0
-    cdef bbiZoomLevel *zoomObj = bbiBestZoom(bwf.levelList, zoomLevel)
+    cdef bbiZoomLevel *zoomObj = bbiBestZoom(bbi.levelList, zoomLevel)
 
-    # Create summary elements
-    cdef bbiSummaryElement *elements
-    AllocArray(elements, nbins)
-
-    # Populate summary elements
+    # Create and populate summary elements
     cdef boolean result = False
+    cdef bbiSummaryElement *elements
+    AllocArray(elements, nbins)    
     if zoomObj != NULL:
-        result = _bbiSummarizedFromZoom(zoomObj, bwf, chromName, start, end,
-            refStart, nbins, elements)
+        result = _bbiSummariesFromZoom(bbi, zoomObj,
+            chromName, start, end, validStart, validEnd, 
+            elements, nbins)
     else:
-        result = _bbiSummarizedFromFull(bwf, chromName, start, end, refStart,
-            nbins, fetchIntervals, elements)
+        result = _bbiSummariesFromFull(bbi, fetchIntervals,
+            chromName, start, end, validStart, validEnd, 
+            elements, nbins)
 
     # Fill output array
-    cdef summaryType = bbiSumMean  # Just support mean for now
+    cdef summaryType = bbiSumMean  # Support only mean for now
     cdef double covFactor = <double>nbins / (end - start)
     cdef bbiSummaryElement *el
     cdef double val
-    cdef int i
+    cdef int loc, i
     if result:
         for i in range(nbins):
-            el = &elements[i]
-            if el.validCount > 0:
-                if summaryType == bbiSumMean:
-                    val = el.sumData / el.validCount
-                elif summaryType == bbiSumMax:
-                    val = el.maxVal
-                elif summaryType == bbiSumMin:
-                    val = el.minVal
-                elif summaryType == bbiSumCoverage:
-                    val = covFactor * el.validCount
-                elif summaryType == bbiSumStandardDeviation:
-                    val = 0.0 #calcStdFromSums(el.sumData, el.sumSquares, el.validCount)
-                else:
-                    raise RuntimeError
-            out[i] = val
+            loc = start + i*stepSize
+            if loc < validStart or loc >= validEnd:
+                out[i] = oob 
+            else:
+                el = &elements[i]
+                if el.validCount > 0:
+                    if summaryType == bbiSumMean:
+                        val = el.sumData / el.validCount
+                    elif summaryType == bbiSumMax:
+                        val = el.maxVal
+                    elif summaryType == bbiSumMin:
+                        val = el.minVal
+                    elif summaryType == bbiSumCoverage:
+                        val = covFactor * el.validCount
+                    elif summaryType == bbiSumStandardDeviation:
+                        val = 0.0 #calcStdFromSums(el.sumData, el.sumSquares, el.validCount)
+                    else:
+                        raise RuntimeError
+                    out[i] = val
 
-    # Destroy summary element array
+    # Destroy summary elements
     freeMem(elements)    
 
 
-cdef boolean _bbiSummarizedFromZoom(
-       bbiZoomLevel *zoom,
+cdef boolean _bbiSummariesFromZoom(
        bbiFile *bbi, 
-       char *chrom, 
+       bbiZoomLevel *zoom,
+       bytes chromName, 
        int start, 
        int end,
-       int refStart,
-       int nbins, 
-       bbiSummaryElement *elements):
+       int validStart,
+       int validEnd,
+       bbiSummaryElement *elements,
+       int nbins):
     # Look up region in index and get data at given zoom level.
     # Summarize this data in the summary array.
 
-    cdef int chromId = bbiChromId(bbi, chrom)
+    cdef int chromId = bbiChromId(bbi, chromName)
     if chromId < 0:
         return False
 
     # Find appropriate zoom-level summary data
     cdef bbiSummary *summList = bbiSummariesInRegion(
-        zoom, bbi, chromId, start, end)
+        zoom, bbi, chromId, validStart, validEnd)
     
     # Interpolate the summary data
     cdef boolean result = False
-    cdef np.int64_t baseCount = end - refStart
-    cdef np.int64_t baseStart = refStart
+    cdef np.int64_t baseCount = end - start
+    cdef np.int64_t baseStart = start
     cdef np.int64_t baseEnd
     cdef int i
     cdef bbiSummary *summ = summList
     if summ != NULL:
         for i in range(nbins):
             # Calculate end of this part of summary
-            baseEnd = refStart + baseCount*(i+1) // nbins
+            baseEnd = start + baseCount*(i+1) // nbins
 
             # Advance summ to skip over parts we are no longer interested in.
             while summ != NULL and summ.end <= baseStart:
@@ -578,26 +651,27 @@ cdef boolean _bbiSummarizedFromZoom(
     return result
 
 
-cdef boolean _bbiSummarizedFromFull(
+cdef boolean _bbiSummariesFromFull(
         bbiFile *bbi, 
-        char *chrom, 
+        BbiFetchIntervals fetchIntervals,
+        bytes chromName, 
         int start, 
         int end,
-        int refStart,
-        int nbins,
-        BbiFetchIntervals fetchIntervals,
-        bbiSummaryElement *elements):
+        int validStart,
+        int validEnd,
+        bbiSummaryElement *elements,
+        int nbins):
     # Summarize data, not using zoom. Updates the summary elements.
 
     # Find appropriate interval elements
     cdef lm *lm = lmInit(0)
     cdef bbiInterval *intervalList = NULL
-    intervalList = fetchIntervals(bbi, chrom, start, end, lm)
+    intervalList = fetchIntervals(bbi, chromName, validStart, validEnd, lm)
     
     # Interpolate the interval data
     cdef boolean result = False
-    cdef np.int64_t baseCount = end - refStart
-    cdef np.int64_t baseStart = refStart
+    cdef np.int64_t baseCount = end - start
+    cdef np.int64_t baseStart = start
     cdef np.int64_t baseEnd
     cdef int end1
     cdef int i
@@ -605,7 +679,7 @@ cdef boolean _bbiSummarizedFromFull(
     if interval != NULL:
         for i in range(nbins):
             # Calculate end of this part of summary
-            baseEnd = refStart + baseCount*(i+1) // nbins
+            baseEnd = start + baseCount*(i+1) // nbins
             end1 = baseEnd
             if end1 == baseStart:
                 end1 = baseStart + 1
