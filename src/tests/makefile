@@ -1,4 +1,4 @@
-include ../../inc/common.mk
+#include ../../inc/common.mk
 
 ifeq (${USE_TABIX},1)
     TABIX_TESTS=tabixTest vcfTest
