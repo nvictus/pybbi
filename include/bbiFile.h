@@ -452,14 +452,19 @@ struct bbiSummary *bbiSummariesInRegion(struct bbiZoomLevel *zoom, struct bbiFil
 /* Return list of all summaries in region at given zoom level of bbiFile. */
 
 
-
 /* Exposing static functions from bbiRead.c */
 int bbiChromId(struct bbiFile *bbi, char *chrom);
 
 bits32 bbiSummarySlice(struct bbiFile *bbi, bits32 baseStart, bits32 baseEnd,
-                       struct bbiSummary *sumList, struct bbiSummaryElement *el);
+    struct bbiSummary *sumList, struct bbiSummaryElement *el);
 
 bits32 bbiIntervalSlice(struct bbiFile *bbi, bits32 baseStart, bits32 baseEnd,
-                        struct bbiInterval *intervalList, struct bbiSummaryElement *el);
+    struct bbiInterval *intervalList, struct bbiSummaryElement *el);
+
+
+/* Exposing static functions from bigBed.c */
+struct bbiInterval *bigBedCoverageIntervals(struct bbiFile *bbi,
+    char *chrom, bits32 start, bits32 end, struct lm *lm);
+
 
 #endif /* BBIFILE_H */
