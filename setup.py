@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 from setuptools import setup, Extension
-from Cython.Distutils import build_ext
+from Cython.Build import cythonize
 import numpy as np
 import os.path as op
 
@@ -21,7 +21,6 @@ ext_modules = [
         include_dirs=[
             np.get_include(),
             op.join(thisdir, 'include'),
-            #op.join(thisdir, 'src'),
         ],
     ),
 ]
@@ -35,7 +34,5 @@ setup(
     #author_email='',
     #url='',
     packages=['kent'],
-    cmdclass={'build_ext': build_ext},
-    ext_modules=ext_modules,
+    ext_modules=cythonize(ext_modules),
 )
-
