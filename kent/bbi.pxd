@@ -203,6 +203,8 @@ cdef extern from "bbiFile.h":
         BbiFetchIntervals fetchIntervals, 
         int summarySize, 
         bbiSummaryElement *summary)
+    bbiSummaryElement bbiTotalSummary(
+        bbiFile *bbi)
     
     # Functions that were declared static (private) in bbiRead.c
     # Source was modified to expose them here via bbiFile.h

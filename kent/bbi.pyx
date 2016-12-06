@@ -112,7 +112,6 @@ def chromsizes(str inFile):
     cdef bits32 sig = _check_sig(inFile)
     cdef bytes bInFile = inFile.encode('utf-8')
     cdef bbiFile *bbi
-    cdef BbiFetchIntervals fetcher
     if sig == bigWigSig:
         bbi = bigWigFileOpen(bInFile)
     elif sig == bigBedSig:
@@ -154,7 +153,6 @@ def zooms(str inFile):
     cdef bits32 sig = _check_sig(inFile)
     cdef bytes bInFile = inFile.encode('utf-8')
     cdef bbiFile *bbi
-    cdef BbiFetchIntervals fetcher
     if sig == bigWigSig:
         bbi = bigWigFileOpen(bInFile)
     elif sig == bigBedSig:
@@ -173,6 +171,53 @@ def zooms(str inFile):
     bbiFileClose(&bbi)
 
     return z_list
+
+
+def info(str inFile):
+    """
+    Returns a dict of information about the bbi file.
+
+    Parameters
+    ----------
+    inFile : str
+        Path to BigWig or BigBed file.
+
+    Returns
+    -------
+    dict
+
+    """
+    # open the file
+    cdef bits32 sig = _check_sig(inFile)
+    cdef bytes bInFile = inFile.encode('utf-8')
+    cdef bbiFile *bbi
+    if sig == bigWigSig:
+        bbi = bigWigFileOpen(bInFile)
+    elif sig == bigBedSig:
+        bbi = bigBedFileOpen(bInFile)
+    else:
+        raise OSError("Not a bbi file: {}".format(inFile))
+
+    cdef bbiSummaryElement summ = bbiTotalSummary(bbi)
+    d = {
+        'version': bbi.version,
+        'isCompressed': bbi.uncompressBufSize > 0,
+        'isSwapped': bbi.isSwapped,
+        'primaryDataSize': bbi.unzoomedIndexOffset - bbi.unzoomedDataOffset,
+        'zoomLevels': bbi.zoomLevels,
+        'chromCount': len(chromsizes(inFile)),
+        'summary': {
+            'basesCovered': summ.validCount,
+            'mean': summ.sumData / summ.validCount,
+            'min': summ.minVal,
+            'max': summ.maxVal,
+            #'std': calcStdFromSums(sum.sumData, sum.sumSquares, sum.validCount),
+        }
+    }
+
+    bbiFileClose(&bbi)
+
+    return d
 
 
 def fetch_intervals(
