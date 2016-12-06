@@ -3,7 +3,7 @@ from __future__ import division, print_function
 import os.path as op
 import numpy as np
 
-from kent import bbi
+import bbi
 import pytest
 
 thisdir = op.dirname(op.realpath(__file__))

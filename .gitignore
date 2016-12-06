@@ -4,8 +4,9 @@ __pycache__/
 *.so
 *.o
 *.a
-kent/*.c
+bbi/*.c
 
+*.egg-info/
 .cache/
 build/
 dist/

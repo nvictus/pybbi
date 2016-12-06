@@ -26,6 +26,8 @@ all: build
 build: src/$(MACHTYPE)/libkent.a
 	python setup.py build_ext --inplace
 
+build-c: src/$(MACHTYPE)/libkent.a
+
 src/$(MACHTYPE)/libkent.a:
 	cd src && $(MAKE)
 
@@ -33,7 +35,7 @@ clean-c:
 	cd src && ${MAKE} clean
 
 clean-py:
-	rm kent/*.c kent/*.so
+	rm bbi/*.c bbi/*.so
 	rm -rf build
 
 clean: clean-py clean-c

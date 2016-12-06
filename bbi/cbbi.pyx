@@ -5,9 +5,23 @@ from six.moves.urllib.request import urlopen
 from six.moves.urllib.parse import urlparse
 from collections import OrderedDict
 import os.path
+import sys
 
 import numpy as np
 import cython
+
+
+if sys.version_info.major > 2:
+    bytes_to_int = int.from_bytes
+else:
+    from contextlib import closing
+    _urlopen = urlopen
+    urlopen = lambda *a, **kw: closing(_urlopen(*a, **kw))
+
+    def bytes_to_int(b, byteorder):
+        from struct import unpack
+        fmt = '<I' if byteorder == 'little' else '>I'
+        return unpack(fmt, b)[0]
 
 
 def _is_url(str uri):
@@ -32,11 +46,11 @@ def _read_magic(str uri):
 
 def _check_sig(str uri):
     magic_bytes = _read_magic(uri)
-    if (int.from_bytes(magic_bytes, 'little') == bigWigSig or
-        int.from_bytes(magic_bytes, 'big') == bigWigSig):
+    if (bytes_to_int(magic_bytes, 'little') == bigWigSig or
+        bytes_to_int(magic_bytes, 'big') == bigWigSig):
         return bigWigSig
-    elif (int.from_bytes(magic_bytes, 'little') == bigBedSig or
-          int.from_bytes(magic_bytes, 'big') == bigBedSig):
+    elif (bytes_to_int(magic_bytes, 'little') == bigBedSig or
+          bytes_to_int(magic_bytes, 'big') == bigBedSig):
         return bigBedSig
     else:
         return 0
