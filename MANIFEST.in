@@ -1,12 +1,12 @@
 include LICENSE
 include README.md
 graft tests
-
-recursive-include src *.c
-recursive-include src *.h
-recursive-include include *.h
+graft include
+graft src
 
 global-exclude __pycache__/*
+global-exclude *.o
+global-exclude *.a
 global-exclude *.so
 global-exclude *.pyd
 global-exclude *.pyc
