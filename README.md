@@ -7,7 +7,7 @@ This provides read-level access to local and remote bigWig and bigBed files but 
 Since [pyBigWig](https://github.com/dpryan79/pyBigWig) now provides numpy-based retrieval and bigBed support, I probably won't work on this much further. However, given that this was born out of frustration, I figured I'd clean it up and share for any who may find it useful.
 
 ### Note
-Unfortunately, Kent's source code is not true library code, as it is littered with error calls that call `exit()`. I've added measures to `pybbi` to pre-empt common input errors, but if an internal error does get thrown, it will crash your interpreter instance. Check out [@dpryan79](https://github.com/dpryan79)'s fantastic [libBigWig](https://github.com/dpryan79/libBigWig) for an alternative and dedicated C library for big binary files.
+Unfortunately, Kent's C source is not well-behaved library code, as it is littered with error calls that call `exit()`. I've added measures to `pybbi` to pre-empt common input errors, but if an internal error does get thrown, it will crash your interpreter instance. Check out [@dpryan79](https://github.com/dpryan79)'s fantastic [libBigWig](https://github.com/dpryan79/libBigWig) for an alternative and dedicated C library for big binary files.
 
 ## Installation ##
 
