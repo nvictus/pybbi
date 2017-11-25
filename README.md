@@ -4,7 +4,7 @@ Python interface to Jim Kent's big binary file (bbi) \[[1](#ref1)\] library from
 
 This provides read-level access to local and remote bigWig and bigBed files but no write capabilitites. The main feature is fast retrieval of range queries into numpy arrays.
 
-Since [pyBigWig](https://github.com/dpryan79/pyBigWig) now provides numpy-based retrieval and bigBed support, I probably won't work on this much further. However, given that this was born out of frustration, I figured I'd clean it up and share for any who may find it useful.
+Note that [pyBigWig](https://github.com/dpryan79/pyBigWig) now provides numpy-based retrieval and bigBed support.
 
 ### Note
 Unfortunately, Kent's C source is not well-behaved library code, as it is littered with error calls that call `exit()`. I've added measures to `pybbi` to pre-empt common input errors, but if an internal error does get thrown, it will crash your interpreter instance. Check out [@dpryan79](https://github.com/dpryan79)'s fantastic [libBigWig](https://github.com/dpryan79/libBigWig) for an alternative and dedicated C library for big binary files.
@@ -13,7 +13,7 @@ Unfortunately, Kent's C source is not well-behaved library code, as it is litter
 
 Requires
 - Linux/MacOS
-- C compiler, zlib, pthreads, make
+- C compiler, zlib, pthreads, libpng, openssl, make
 - Python 2.7/3.3+
 - `numpy` and `cython`
 
@@ -63,7 +63,6 @@ Accepts either a bigWig or bigBed file path / URL.
 
 See the docstrings for complete documentation.
 
-
 ## Related projects ##
 
 - [libBigWig](https://github.com/dpryan79/libBigWig): Alternative C library for bigWig and bigBed files by Devon Ryan
@@ -74,3 +73,11 @@ See the docstrings for complete documentation.
 ## References ##
 
 <a id="ref1">[1]</a>: http://bioinformatics.oxfordjournals.org/content/26/17/2204.full
+
+## Troubleshooting ##
+
+On OSX, you may get errors about missing header files (e.g., `png.h`, `openssl/sha.h`), which even if installed may not be located in standard include locations. Either [create the required symlinks](https://www.anintegratedworld.com/mac-osx-fatal-error-opensslsha-h-file-not-found/) or update the `C_INCLUDE_PATH` environment variable accordingly before installing pybbi.
+
+```
+export C_INCLUDE_PATH="/usr/local/include/libpng:/usr/local/opt/openssl/include:$C_INCLUDE_PATH"
+```
