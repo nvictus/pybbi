@@ -49,10 +49,10 @@ These accept a local file path or URL.
 
 These accept either a bigWig or bigBed file path / URL. The signal of a bigBed file is the coverage of its intervals.
 
-Data "**summary**" querying is supported by specifying the number of `bins` for coarse graining. Currently, only the mean statistic is supported. **Missing** data can be filled with a custom fill value, `missing` (default = 0). Finally, **out-of-bounds** ranges (i.e. `start` less than zero or `end` greater than the chromosome length) are permitted because of their utility e.g., for generating vertical heatmap stacks centered at specific genomic features. A separate custom fill value, `oob` can be provided for out-of-bounds positions (default = NaN).
-
 - `bbi.fetch(path, chrom, start, end, [bins [, missing [, oob]]])` --> 1D numpy array
 - `bbi.stackup(path, chroms, starts, ends, [bins [, missing [, oob]]])` --> 2D numpy array ("stacked heatmap")
+
+Data "**summary**" querying is supported by specifying the number of `bins` for coarse graining. Currently, only the mean statistic is supported. **Missing** data can be filled with a custom fill value, `missing` (default = 0). Finally, **out-of-bounds** ranges (i.e. `start` less than zero or `end` greater than the chromosome length) are permitted because of their utility e.g., for generating vertical heatmap stacks centered at specific genomic features. A separate custom fill value, `oob` can be provided for out-of-bounds positions (default = NaN).
 
 ### Interval query
 
@@ -78,6 +78,6 @@ See the docstrings for complete documentation.
 
 On OSX, you may get errors about missing header files (e.g., `png.h`, `openssl/sha.h`), which even if installed may not be located in standard include locations. Either [create the required symlinks](https://www.anintegratedworld.com/mac-osx-fatal-error-opensslsha-h-file-not-found/) or update the `C_INCLUDE_PATH` environment variable accordingly before installing pybbi.
 
-```
+```bash
 export C_INCLUDE_PATH="/usr/local/include/libpng:/usr/local/opt/openssl/include:$C_INCLUDE_PATH"
 ```
