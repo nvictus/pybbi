@@ -6,6 +6,7 @@ from Cython.Build import cythonize
 from subprocess import check_call
 import os.path as op
 import numpy as np
+import sys
 import re
 import io
 
@@ -21,6 +22,19 @@ class build_ext(_build_ext):
         _build_ext.run(self)
 
 
+extra_library_dirs = []
+extra_include_dirs = []
+if sys.platform == "darwin":
+    # https://solitum.net/openssl-os-x-el-capitan-and-brew/
+    extra_library_dirs += ['/usr/local/opt/openssl/lib']
+    extra_include_dirs += ['/usr/local/opt/openssl/include']
+elif sys.platform.startswith("linux"):
+    for dirname in ['libpng16', 'openssl']:
+        inc_dir = op.join(sys.prefix, 'include', dirname)
+        if op.isdir(inc_dir):
+            extra_include_dirs.append(inc_dir)
+
+
 ext_modules = [
     Extension(
         name='bbi.cbbi', 
@@ -29,14 +43,14 @@ ext_modules = [
         ],
         library_dirs=[
             op.join(thisdir, 'src/x86_64'),
-        ],
+        ] + extra_library_dirs,
         libraries=[
             'c', 'z', 'pthread', 'kent',
         ],
         include_dirs=[
             np.get_include(),
             op.join(thisdir, 'include'),
-        ],
+        ] + extra_include_dirs,
     ),
 ]
 
