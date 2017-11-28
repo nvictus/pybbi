@@ -7,6 +7,7 @@ from subprocess import check_call
 import os.path as op
 import numpy as np
 import sys
+import os
 import re
 import io
 
@@ -16,8 +17,15 @@ thisdir = op.dirname(op.realpath(__file__))
 class build_ext(_build_ext):
     def run(self):
         # First, compile our C library
-        print("Compiling libkent...")
+        for lib_dir in extra_library_dirs:
+            os.environ["LIBRARY_PATH"] = lib_dir + ':' + os.environ.get("LIBRARY_PATH", "")
+        for inc_dir in extra_include_dirs:
+            os.environ["C_INCLUDE_PATH"] = inc_dir + ':' + os.environ.get("C_INCLUDE_PATH", "")
+        print("Compiling libkent...", file=sys.stderr)
+        print("LIBRARY_PATH: " + os.environ.get("LIBRARY_PATH", ""), file=sys.stderr)
+        print("C_INCLUDE_PATH: " + os.environ.get("C_INCLUDE_PATH", ""), file=sys.stderr)
         check_call(['make', 'build-c'])
+
         # Now, proceed to build extension modules
         _build_ext.run(self)
 
