@@ -14,12 +14,32 @@ import io
 thisdir = op.dirname(op.realpath(__file__))
 
 
+# Paths to propagate to make to build libkent
+extra_library_dirs = []
+extra_include_dirs = []
+for dirname in ['libpng16', 'openssl']:
+    inc_dir = op.join(sys.prefix, 'include', dirname)
+    if op.isdir(inc_dir):
+        extra_include_dirs.append(inc_dir)
+
+
+if sys.platform == "darwin":
+    # https://solitum.net/openssl-os-x-el-capitan-and-brew/
+    extra_library_dirs += [
+        '/usr/local/opt/openssl/lib'
+    ]
+    extra_include_dirs += [
+        '/usr/local/opt/openssl/include', 
+        '/usr/local/include/libpng16'
+    ]
+
+
 class build_ext(_build_ext):
     def run(self):
         # First, compile our C library
-        for lib_dir in extra_library_dirs:
+        for lib_dir in extra_library_dirs[::-1]:
             os.environ["LIBRARY_PATH"] = lib_dir + ':' + os.environ.get("LIBRARY_PATH", "")
-        for inc_dir in extra_include_dirs:
+        for inc_dir in extra_include_dirs[::-1]:
             os.environ["C_INCLUDE_PATH"] = inc_dir + ':' + os.environ.get("C_INCLUDE_PATH", "")
         print("Compiling libkent...", file=sys.stderr)
         print("LIBRARY_PATH: " + os.environ.get("LIBRARY_PATH", ""), file=sys.stderr)
@@ -28,19 +48,6 @@ class build_ext(_build_ext):
 
         # Now, proceed to build extension modules
         _build_ext.run(self)
-
-
-extra_library_dirs = []
-extra_include_dirs = []
-if sys.platform == "darwin":
-    # https://solitum.net/openssl-os-x-el-capitan-and-brew/
-    extra_library_dirs += ['/usr/local/opt/openssl/lib']
-    extra_include_dirs += ['/usr/local/opt/openssl/include']
-elif sys.platform.startswith("linux"):
-    for dirname in ['libpng16', 'openssl']:
-        inc_dir = op.join(sys.prefix, 'include', dirname)
-        if op.isdir(inc_dir):
-            extra_include_dirs.append(inc_dir)
 
 
 ext_modules = [
