@@ -86,9 +86,9 @@ def test_fetch_oob(path):
     assert np.all(x[-10:] == 0)
 
 
-def test_intervals_bw():
-    pass
-
-
-def test_intervals_bb():
-    pass
+@pytest.mark.parametrize('path', bbi_paths)
+def test_fetch_intervals(path):
+    x = list(bbi.fetch_intervals(path, 'chr21', 0, 1000))  # unmappable region
+    assert len(x) == 0
+    x = list(bbi.fetch_intervals(path, 'chr21', 0, 10000000))
+    assert len(x) > 0
