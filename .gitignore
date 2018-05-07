@@ -7,6 +7,7 @@ __pycache__/
 bbi/*.c
 
 *.egg-info/
+.pytest_cache/
 .cache/
 build/
 dist/
