@@ -325,8 +325,8 @@ def fetch_intervals(
             bbInterval = bbInterval.next
 
     # clean up
-    if cRest != NULL:
-        free(cRest)
+    # if cRest != NULL:
+    #     free(cRest)
     lmCleanup(&lm)
     bbiFileClose(&bbi)
 
