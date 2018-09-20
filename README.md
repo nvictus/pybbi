@@ -4,34 +4,6 @@ Python interface to Jim Kent's big binary file (bbi) \[[1](#ref1)\] library from
 
 This provides read-level access to local and remote bigWig and bigBed files but no write capabilitites. The main feature is fast retrieval of range queries into numpy arrays.
 
-Note that [pyBigWig](https://github.com/dpryan79/pyBigWig) now provides numpy-based retrieval and bigBed support.
-
-### Note
-Unfortunately, Kent's C source is not well-behaved library code, as it is littered with error calls that call `exit()`. I've added measures to `pybbi` to pre-empt common input errors, but if an internal error does get thrown, it will crash your interpreter instance. Check out [@dpryan79](https://github.com/dpryan79)'s fantastic [libBigWig](https://github.com/dpryan79/libBigWig) for an alternative and dedicated C library for big binary files.
-
-## Installation ##
-
-Requires
-- Linux/MacOS
-- C compiler, zlib, pthreads, libpng, openssl, make
-- Python 2.7/3.3+
-- `numpy` and `cython`
-
-`pybbi` ships with (slightly modified) kent utils source, which it will compile before building the extension module.
-
-```
-$ pip install git+https://github.com/nvictus/pybbi.git
-```
-
-Or clone and install in development mode:
-
-```
-$ git clone https://github.com/nvictus/pybbi.git
-$ cd pybbi
-$ pip install -e .
-```
-
-
 ## API ##
 
 ### Introspection
@@ -63,6 +35,29 @@ Accepts either a bigWig or bigBed file path / URL.
 
 See the docstrings for complete documentation.
 
+
+## Installation ##
+
+Requires
+- Linux/MacOS
+- C compiler, zlib, pthreads, libpng, openssl, make
+- Python 2.7/3.3+
+- `numpy` and `cython`
+
+`pybbi` ships with (slightly modified) kent utils source, which it will compile before building the extension module.
+
+```
+$ pip install git+https://github.com/nvictus/pybbi.git
+```
+
+Or clone and install in development mode:
+
+```
+$ git clone https://github.com/nvictus/pybbi.git
+$ cd pybbi
+$ pip install -e .
+```
+
 ## Related projects ##
 
 - [libBigWig](https://github.com/dpryan79/libBigWig): Alternative C library for bigWig and bigBed files by Devon Ryan
@@ -81,3 +76,9 @@ On OSX, you may get errors about missing header files (e.g., `png.h`, `openssl/s
 ```bash
 export C_INCLUDE_PATH="/usr/local/include/libpng:/usr/local/opt/openssl/include:$C_INCLUDE_PATH"
 ```
+
+### Notes
+
+[pyBigWig](https://github.com/dpryan79/pyBigWig) now also provides numpy-based retrieval and bigBed support.
+
+Unfortunately, Kent's C source is not well-behaved library code, as it is littered with error calls that call `exit()`. I've added measures to `pybbi` to pre-empt common input errors, but if an internal error does get thrown, it will crash your interpreter instance. Check out [@dpryan79](https://github.com/dpryan79)'s [libBigWig](https://github.com/dpryan79/libBigWig) for an alternative and dedicated C library for big binary files.
