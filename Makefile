@@ -1,4 +1,4 @@
-.PHONY: all build clean clean-py clean-c
+.PHONY: all build clean clean-py clean-c build-sdist publish-test publish
 
 current_dir = $(shell pwd)
 
@@ -34,9 +34,26 @@ src/$(MACHTYPE)/libkent.a:
 clean-c:
 	cd src && ${MAKE} clean
 
-clean-py:
+clean-pyc:
+	find . -name '*.pyc' -exec rm --force {} +
+	find . -name '*.pyo' -exec rm --force {} +
+
+clean-cython:
 	rm bbi/*.c bbi/*.so
 	rm -rf build
 
+clean-build:
+	rm --force --recursive build/
+	rm --force --recursive dist/
+
 clean: clean-py clean-c
 
+build-sdist: build
+	python setup.py sdist
+	#python setup.py bdist_wheel
+
+publish-test: build-sdist
+	twine upload --repository-url https://test.pypi.org/legacy/ dist/*
+
+publish: build-sdist
+	twine upload dist/*
