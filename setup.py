@@ -13,6 +13,32 @@ import io
 thisdir = op.dirname(op.realpath(__file__))
 
 
+class lazylist(list):
+    '''
+    Used to delay the build-time Cython and numpy imports required to configure
+    our list of extension modules until after setup_requires has been processed.
+
+    '''
+    def __init__(self, callback):
+        self._list = None
+        self.callback = callback
+
+    def _cached_list(self):
+        if self._list is None:
+            self._list = self.callback()
+        return self._list
+
+    def __len__(self):
+        return len(self._cached_list())
+
+    def __iter__(self):
+        for e in self._cached_list():
+            yield e
+
+    def __getitem__(self, i):
+        return self._cached_list()[i]
+
+
 def read(*parts, **kwargs):
     encoding = kwargs.pop('encoding', 'utf-8')
     filepath = op.join(op.dirname(__file__), *parts)
@@ -27,34 +53,14 @@ def get_version(pkg):
     return version
 
 
-class lazy_list(list):
-    '''
-    Used to delay cython import until all setup_requires have been installed.
-
-    '''
-    def __init__(self, callback):
-        self._list, self.callback = None, callback
-    def c_list(self):
-        if self._list is None:
-            self._list = self.callback()
-        return self._list
-    def __iter__(self):
-        for e in self.c_list():
-            yield e
-    def __getitem__(self, i):
-        return self.c_list()[i]
-    def __len__(self):
-        return len(self.c_list())
-
-
 # Paths to propagate to make to build libkent
 extra_library_dirs = []
 extra_include_dirs = []
+
 for dirname in ['libpng16', 'openssl']:
     inc_dir = op.join(sys.prefix, 'include', dirname)
     if op.isdir(inc_dir):
         extra_include_dirs.append(inc_dir)
-
 
 if sys.platform == "darwin":
     # https://solitum.net/openssl-os-x-el-capitan-and-brew/
@@ -87,12 +93,12 @@ class build_ext(_build_ext):
         # http://stackoverflow.com/a/21621689/579416
         # Prevent numpy from thinking it is still in its setup process:
         __builtins__.__NUMPY_SETUP__ = False
-        import numpy
-        self.include_dirs.append(numpy.get_include())
 
 
 def get_ext_modules():
     from Cython.Build import cythonize
+    import numpy
+
     ext_modules = [
         Extension(
             name='bbi.cbbi', 
@@ -106,7 +112,7 @@ def get_ext_modules():
                 'c', 'z', 'pthread', 'kent',
             ],
             include_dirs=[
-                #np.get_include(),
+                numpy.get_include(),
                 op.join(thisdir, 'include'),
             ] + extra_include_dirs,
         ),
@@ -127,7 +133,7 @@ setup(
     ],
     install_requires=['six', 'numpy'],
     tests_require=['pytest'],
-    ext_modules=lazy_list(get_ext_modules),
+    ext_modules=lazylist(get_ext_modules),
     cmdclass={
         'build_ext': build_ext
     }

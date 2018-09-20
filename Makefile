@@ -1,4 +1,4 @@
-.PHONY: all build clean clean-py clean-c build-sdist publish-test publish
+.PHONY: all build clean clean-c clean-pyc clean-cython clean-build build-sdist publish-test publish
 
 current_dir = $(shell pwd)
 
@@ -42,13 +42,13 @@ clean-cython:
 	rm bbi/*.c bbi/*.so
 	rm -rf build
 
+clean: clean-pyc clean-c
+
 clean-build:
 	rm --force --recursive build/
 	rm --force --recursive dist/
 
-clean: clean-py clean-c
-
-build-sdist: build
+build-sdist: clean-build
 	python setup.py sdist
 	#python setup.py bdist_wheel
 
