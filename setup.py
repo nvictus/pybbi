@@ -122,17 +122,38 @@ def get_ext_modules():
 
 setup(
     name='pybbi',
-    url='https://github.com/nvictus/pybbi',
+    author='Nezar Abdennur',
+    author_email='nabdennur@gmail.com',
+    license='MIT',
     version=get_version('bbi'),
     packages=['bbi'],
+    description='Python bindings to UCSC Big Binary (bigWig/bigBed) file library',
+    long_description=read('README.md'),
+    long_description_content_type='text/markdown',
+    url='https://github.com/nvictus/pybbi',
+    classifiers=[
+        'Development Status :: 4 - Beta',
+        'License :: OSI Approved :: MIT License',
+        'Operating System :: POSIX',
+        'Operating System :: Unix',
+        'Operating System :: MacOS',
+        'Programming Language :: Python :: 2.7',
+        'Programming Language :: Python :: 3',
+        'Topic :: Scientific/Engineering :: Bio-Informatics',
+    ],
     zip_safe=False,
     setup_requires=[
         'setuptools>=18.0',
         'cython',
         'numpy',
     ],
-    install_requires=['six', 'numpy'],
-    tests_require=['pytest'],
+    install_requires=[
+        'six', 
+        'numpy'
+    ],
+    tests_require=[
+        'pytest'
+    ],
     ext_modules=lazylist(get_ext_modules),
     cmdclass={
         'build_ext': build_ext
