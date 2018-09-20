@@ -44,15 +44,15 @@ Requires
 - Python 2.7/3.3+
 - `numpy` and `cython`
 
-`pybbi` ships with (slightly modified) kent utils source, which it will compile before building the extension module.
-
 On fresh Ubuntu instance, you'll need `build-essential`, `make`, `libssl-dev`, `libpng16-dev`. It seems to work on the Windows Subsystem for Linux too.
 
+`pybbi` is now on PyPI as a source distribution. It ships with (slightly modified) kent utils source, which it will compile before building the extension module.
+
 ```
-$ pip install git+https://github.com/nvictus/pybbi.git
+$ pip install pybbi
 ```
 
-Or clone and install in development mode:
+For development, clone the repo and install in editable mode:
 
 ```
 $ git clone https://github.com/nvictus/pybbi.git
