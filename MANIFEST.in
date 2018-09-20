@@ -1,8 +1,12 @@
 include LICENSE
 include README.md
+include Makefile
 graft tests
 graft include
 graft src
+
+global-include *.pyx
+global-include *.pxd
 
 global-exclude __pycache__/*
 global-exclude *.o
