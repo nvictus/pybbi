@@ -87,13 +87,6 @@ class build_ext(_build_ext):
         # Now, proceed to build extension modules
         _build_ext.run(self)
 
-    def finalize_options(self):
-        _build_ext.finalize_options(self)
-        # Fix to work with bootstrapped numpy installation
-        # http://stackoverflow.com/a/21621689/579416
-        # Prevent numpy from thinking it is still in its setup process:
-        __builtins__.__NUMPY_SETUP__ = False
-
 
 def get_ext_modules():
     from Cython.Build import cythonize
