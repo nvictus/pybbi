@@ -46,6 +46,8 @@ Requires
 
 `pybbi` ships with (slightly modified) kent utils source, which it will compile before building the extension module.
 
+On fresh Ubuntu instance, you'll need `build-essential`, `make`, `libssl-dev`, `libpng16-dev`. It seems to work on the Windows Subsystem for Linux too.
+
 ```
 $ pip install git+https://github.com/nvictus/pybbi.git
 ```
