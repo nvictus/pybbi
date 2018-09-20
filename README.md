@@ -65,6 +65,8 @@ $ pip install -e .
 - [bw-python](https://github.com/brentp/bw-python): Alternative Python wrapper to `libBigWig` by Brent Pederson
 - [bx-python](https://github.com/bxlab/bx-python): Python bioinformatics library from James Taylor's group that includes tools for bbi files.
 
+Note that pyBigWig also provides numpy-based retrieval and bigBed support.
+
 ## References ##
 
 <a id="ref1">[1]</a>: http://bioinformatics.oxfordjournals.org/content/26/17/2204.full
@@ -77,8 +79,6 @@ On OSX, you may get errors about missing header files (e.g., `png.h`, `openssl/s
 export C_INCLUDE_PATH="/usr/local/include/libpng:/usr/local/opt/openssl/include:$C_INCLUDE_PATH"
 ```
 
-### Notes
-
-[pyBigWig](https://github.com/dpryan79/pyBigWig) now also provides numpy-based retrieval and bigBed support.
+## Notes
 
 Unfortunately, Kent's C source is not well-behaved library code, as it is littered with error calls that call `exit()`. I've added measures to `pybbi` to pre-empt common input errors, but if an internal error does get thrown, it will crash your interpreter instance. Check out [@dpryan79](https://github.com/dpryan79)'s [libBigWig](https://github.com/dpryan79/libBigWig) for an alternative and dedicated C library for big binary files.
