@@ -15,4 +15,4 @@ from .cbbi import (
 __all__ = ['is_bbi', 'is_bigwig', 'is_bigbed', 'info', 'zooms', 'chromsizes', 
            'fetch', 'stackup', 'fetch_intervals']
 
-__version__ = '0.1.1'
+__version__ = '0.1.2'
