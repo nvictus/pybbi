@@ -55,6 +55,7 @@ build-sdist: clean-build
 	python setup.py sdist
 	#python setup.py bdist_wheel
 
+# pip install --index-url https://test.pypi.org/simple/ pybbi
 publish-test: build-sdist
 	twine upload --repository-url https://test.pypi.org/legacy/ dist/*
 
