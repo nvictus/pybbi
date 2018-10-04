@@ -92,3 +92,19 @@ def test_fetch_intervals(path):
     assert len(x) == 0
     x = list(bbi.fetch_intervals(path, 'chr21', 0, 10000000))
     assert len(x) > 0
+
+
+@pytest.mark.parametrize('path', bbi_paths)
+def test_fetch_summary_stats(path):
+    x = bbi.fetch(path, 'chr21', 20000000, 20001000, bins=10, summary='mean')
+    y = bbi.fetch(path, 'chr21', 20000000, 20001000, bins=10)
+    assert np.allclose(x, y)
+
+    values = bbi.fetch(path, 'chr21', 20000000, 20001000)
+    vmin = bbi.fetch(path, 'chr21', 20000000, 20001000, bins=10, summary='min').min()
+    assert np.isclose(vmin, np.min(values))
+    vmax = bbi.fetch(path, 'chr21', 20000000, 20001000, bins=10, summary='max').max()
+    assert np.isclose(vmax, np.max(values))
+
+    with pytest.raises(ValueError):
+        bbi.fetch(path, 'chr21', 20000000, 20001000, bins=10, summary='foo')

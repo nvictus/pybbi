@@ -10,6 +10,8 @@ import sys
 import numpy as np
 import cython
 
+from libc.math cimport sqrt
+
 
 if sys.version_info.major > 2:
     bytes_to_int = int.from_bytes
@@ -54,6 +56,15 @@ def _check_sig(str uri):
         return bigBedSig
     else:
         return 0
+
+
+cpdef dict BBI_SUMMARY_TYPES = {
+    'mean': bbiSumMean,
+    'max': bbiSumMax,
+    'min': bbiSumMin,
+    'cov': bbiSumCoverage,
+    'std': bbiSumStandardDeviation,
+}
 
 
 def is_bbi(str inFile):
@@ -225,7 +236,9 @@ def info(str inFile):
             'mean': summ.sumData / summ.validCount,
             'min': summ.minVal,
             'max': summ.maxVal,
-            #'std': calcStdFromSums(sum.sumData, sum.sumSquares, sum.validCount),
+            'std': sqrt(var_from_sums(summ.sumData,
+                                      summ.sumSquares,
+                                      summ.validCount)),
         }
     }
 
@@ -338,7 +351,8 @@ def fetch(
         int end, 
         int bins=-1, 
         double missing=0.0, 
-        double oob=np.nan):
+        double oob=np.nan,
+        str summary='mean'):
     """
     Read the signal data in a bbi file overlapping a genomic query interval into
     a numpy array. 
@@ -360,13 +374,17 @@ def fetch(
         End coordinate. If end is less than zero, the end is set to the
         chromosome size. If end is greater than the chromosome size, the end of
         the track is not truncated but treated as out of bounds.
-    bins : int
-        Number of bins to divide the query interval into for coarse graining. 
-        Default (-1) means no coarse graining (i.e., 1 bp bins).
-    missing : float
+    bins : int, optional
+        Number of bins to divide the query interval into for coarsegraining. 
+        Default (-1) means no summarization (i.e., 1 bp bins).
+    missing : float, optional
         Fill-in value for unreported data in valid regions. Default is 0.
-    oob : float
+    oob : float, optional
         Fill-in value for out-of-bounds regions. Default is NaN.
+    summary : str, optional
+        Summary statistic to use if summarizing. Options are 'mean', 'min',
+        'max', 'cov' (coverage), and 'std' (standard deviation). Default is
+        'mean'.
 
     Returns
     -------
@@ -411,19 +429,27 @@ def fetch(
             " start = {}, end = {}.".format(start, end))
     
     # prepare the output
-    cdef boolean summary = True
+    cdef boolean is_summary = True
     if bins < 1:
-        summary = False
+        is_summary = False
         bins = length
 
     cdef np.ndarray[np.double_t, ndim=1] out = np.empty(bins, dtype=float)
     out[:] = missing
 
     # query
-    if summary:
+    cdef bbiSummaryType summary_type
+    if is_summary:
+        try:
+            summary_type = BBI_SUMMARY_TYPES[summary]
+        except KeyError:
+            raise ValueError(
+                'Invalid summary type "{}". Must be one of: {}.'.format(
+                summary,
+                set(BBI_SUMMARY_TYPES.keys())))
         array_query_summarized(
             out, bins, bbi, fetcher, 
-            chromName, start, end, chromSize, oob)
+            chromName, start, end, chromSize, oob, summary_type)
     else:
         array_query_full(
             out, bins, bbi, fetcher, 
@@ -442,7 +468,8 @@ def stackup(
         ends,
         int bins=-1,
         double missing=0.0,
-        double oob=np.nan):
+        double oob=np.nan,
+        str summary='mean'):
     """
     Vertically stack signal tracks from equal-length bbi query intervals.
 
@@ -465,6 +492,10 @@ def stackup(
         Fill-in value for unreported data in valid regions. Default is 0.
     oob : float
         Fill-in value for out-of-bounds regions. Default is NaN.
+    summary : str, optional
+        Summary statistic to use if summarizing. Options are 'mean', 'min',
+        'max', 'cov' (coverage), and 'std' (standard deviation). Default is
+        'mean'.
 
     Returns
     -------
@@ -513,6 +544,7 @@ def stackup(
     cdef int chromSize
     cdef int start, end
     cdef Py_ssize_t i
+    cdef bbiSummaryType summary_type
     for i in range(n):
         chromName = chroms_[i].encode('ascii')
         chromSize = bbiChromSize(bbi, chromName)
@@ -528,9 +560,16 @@ def stackup(
                 out[i, :], bins, bbi, fetcher, 
                 chromName, start, end, chromSize, oob)
         else:
+            try:
+                summary_type = BBI_SUMMARY_TYPES[summary]
+            except KeyError:
+                raise ValueError(
+                    'Invalid summary type "{}". Must be one of: {}.'.format(
+                    summary,
+                    set(BBI_SUMMARY_TYPES.keys())))
             array_query_summarized(
                 out[i, :], bins, bbi, fetcher, 
-                chromName, start, end, chromSize, oob)
+                chromName, start, end, chromSize, oob, summary_type)
             
     # clean up
     bbiFileClose(&bbi)
@@ -590,6 +629,13 @@ cdef inline void array_query_full(
     lmCleanup(&lm)
 
 
+cdef double var_from_sums(double sum, double sumSquares, bits64 n):
+    cdef double var = sumSquares - sum*sum/n
+    if n > 1:
+        var /= n -1
+    return var
+
+
 cdef inline void array_query_summarized(
         np.ndarray[np.double_t, ndim=1] out, 
         int nbins,
@@ -599,7 +645,8 @@ cdef inline void array_query_summarized(
         int start,
         int end,
         int chromSize,
-        double oob):
+        double oob,
+        bbiSummaryType summaryType):
     
     # Clip the query range
     cdef int validStart = start, validEnd = end
@@ -630,7 +677,7 @@ cdef inline void array_query_summarized(
             elements, nbins)
 
     # Fill output array
-    cdef summaryType = bbiSumMean  # Support only mean for now
+    #cdef bbiSummaryType summaryType = bbiSumMean  # Support only mean for now
     cdef double covFactor = <double>nbins / (end - start)
     cdef bbiSummaryElement *el
     cdef double val
@@ -652,7 +699,9 @@ cdef inline void array_query_summarized(
                     elif summaryType == bbiSumCoverage:
                         val = covFactor * el.validCount
                     elif summaryType == bbiSumStandardDeviation:
-                        val = 0.0 #calcStdFromSums(el.sumData, el.sumSquares, el.validCount)
+                        val = sqrt(var_from_sums(el.sumData,
+                                                 el.sumSquares,
+                                                 el.validCount))
                     else:
                         raise RuntimeError
                     out[i] = val
