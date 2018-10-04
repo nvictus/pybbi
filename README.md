@@ -17,16 +17,23 @@ These accept a local file path or URL.
 - `bbi.zooms(path)` --> `list`
 - `bbi.info(path)` --> `dict`
 
-### Signal query
+### Array output
 
-These accept either a bigWig or bigBed file path / URL. The signal of a bigBed file is the coverage of its intervals.
+These accept either a bigWig or bigBed file path / URL. The signal of a bigBed file is the genomic coverage of its intervals.
 
-- `bbi.fetch(path, chrom, start, end, [bins [, missing [, oob]]])` --> 1D numpy array
-- `bbi.stackup(path, chroms, starts, ends, [bins [, missing [, oob]]])` --> 2D numpy array ("stacked heatmap")
+For a single range query:
+- `bbi.fetch(path, chrom, start, end, [bins [, missing [, oob, [, summary]]]])` --> 1D numpy array
 
-Data "**summary**" querying is supported by specifying the number of `bins` for coarse graining. Currently, only the mean statistic is supported. **Missing** data can be filled with a custom fill value, `missing` (default = 0). Finally, **out-of-bounds** ranges (i.e. `start` less than zero or `end` greater than the chromosome length) are permitted because of their utility e.g., for generating vertical heatmap stacks centered at specific genomic features. A separate custom fill value, `oob` can be provided for out-of-bounds positions (default = NaN).
+For a list of equal-length segments (i.e. to produce a stacked heatmap):
+- `bbi.stackup(path, chroms, starts, ends, [bins [, missing [, oob, [, summary]]]])` --> 2D numpy array
 
-### Interval query
+**Summary** querying is supported by specifying the number of `bins` for coarsegraining. The summary statistic can be one of: 'mean', 'min', 'max', 'cov', or 'std'. (default = 'mean').
+
+**Missing** data can be filled with a custom fill value, `missing` (default = 0). 
+
+**Out-of-bounds** ranges (i.e. `start` less than zero or `end` greater than the chromosome length) are permitted because of their utility e.g., for generating vertical heatmap stacks centered at specific genomic features. A separate custom fill value, `oob` can be provided for out-of-bounds positions (default = NaN).
+
+### Interval output
 
 Accepts either a bigWig or bigBed file path / URL.
 
@@ -67,7 +74,7 @@ $ pip install -e .
 - [bw-python](https://github.com/brentp/bw-python): Alternative Python wrapper to `libBigWig` by Brent Pederson
 - [bx-python](https://github.com/bxlab/bx-python): Python bioinformatics library from James Taylor's group that includes tools for bbi files.
 
-Note that pyBigWig also provides numpy-based retrieval and bigBed support.
+This library provides bindings to the reference UCSC bbi library code. Check out [@dpryan79](https://github.com/dpryan79)'s [libBigWig](https://github.com/dpryan79/libBigWig) for an alternative and dedicated C library for big binary files. pyBigWig also provides numpy-based retrieval and bigBed support.
 
 ## References ##
 
@@ -83,4 +90,4 @@ export C_INCLUDE_PATH="/usr/local/include/libpng:/usr/local/opt/openssl/include:
 
 ## Notes
 
-Unfortunately, Kent's C source is not well-behaved library code, as it is littered with error calls that call `exit()`. I've added measures to `pybbi` to pre-empt common input errors, but if an internal error does get thrown, it will crash your interpreter instance. Check out [@dpryan79](https://github.com/dpryan79)'s [libBigWig](https://github.com/dpryan79/libBigWig) for an alternative and dedicated C library for big binary files.
+Unfortunately, Kent's C source is not well-behaved library code, as it is littered with error calls that call `exit()`. `pybbi` will catch and pre-empt common input errors, but if somehow an internal error does get raised, it will terminate your interpreter instance.
