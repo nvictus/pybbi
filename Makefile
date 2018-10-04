@@ -48,6 +48,9 @@ clean-build:
 	rm --force --recursive build/
 	rm --force --recursive dist/
 
+test:
+	pytest
+
 build-sdist: clean-build
 	python setup.py sdist
 	#python setup.py bdist_wheel
