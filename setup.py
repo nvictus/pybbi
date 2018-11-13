@@ -2,8 +2,10 @@
 # -*- coding: utf-8 -*-
 from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext as _build_ext
-from subprocess import check_call
+from subprocess import check_call, PIPE
 import os.path as op
+import subprocess
+import sysconfig
 import sys
 import os
 import re
@@ -13,7 +15,7 @@ import io
 thisdir = op.dirname(op.realpath(__file__))
 
 
-class lazylist(list):
+class delayedlist(list):
     '''
     Used to delay the build-time Cython and numpy imports required to configure
     our list of extension modules until after setup_requires has been processed.
@@ -53,64 +55,93 @@ def get_version(pkg):
     return version
 
 
-# Paths to propagate to make to build libkent
-extra_library_dirs = []
-extra_include_dirs = []
+# Configuration for the static C library libkent.a
+CONFIG_VARS = sysconfig.get_config_vars()
+LIBDIR = CONFIG_VARS.get('LIBDIR', op.join(sys.prefix, 'lib'))
+INCLUDEDIR = CONFIG_VARS.get('INCLUDEDIR', op.join(sys.prefix, 'include'))
+MACHTYPE = subprocess.Popen(['uname', '-m'], stdout=PIPE).stdout.read()
+if MACHTYPE:
+    if sys.version_info[0] > 2:
+        MACHTYPE = MACHTYPE.decode('utf-8')
+    MACHTYPE = MACHTYPE.strip()
+
+library_dirs = [
+    LIBDIR,
+    op.join(thisdir, 'src', MACHTYPE),
+]
+
+include_dirs = [
+    INCLUDEDIR,
+    op.join(thisdir, 'include'),
+    op.join(thisdir, 'src'),
+]
 
 for dirname in ['libpng16', 'openssl']:
-    inc_dir = op.join(sys.prefix, 'include', dirname)
-    if op.isdir(inc_dir):
-        extra_include_dirs.append(inc_dir)
+    inc_subdir = op.join(INCLUDEDIR, dirname)
+    if op.isdir(INCLUDEDIR):
+        include_dirs.append(inc_subdir)
 
 if sys.platform == "darwin":
     # https://solitum.net/openssl-os-x-el-capitan-and-brew/
-    extra_library_dirs += [
+    library_dirs += [
         '/usr/local/opt/openssl/lib'
     ]
-    extra_include_dirs += [
-        '/usr/local/opt/openssl/include', 
+    include_dirs += [
+        '/usr/local/opt/openssl/include',
         '/usr/local/include/libpng16'
     ]
 
+_path = os.environ.get("LIBRARY_PATH", "")
+if _path:
+    _path = ':'.join(library_dirs + [_path])
+else:
+    _path = ':'.join(library_dirs)
+os.environ["LIBRARY_PATH"] = _path
 
-class build_ext(_build_ext):
-    def run(self):
-        # First, compile our C library
-        for lib_dir in extra_library_dirs[::-1]:
-            os.environ["LIBRARY_PATH"] = lib_dir + ':' + os.environ.get("LIBRARY_PATH", "")
-        for inc_dir in extra_include_dirs[::-1]:
-            os.environ["C_INCLUDE_PATH"] = inc_dir + ':' + os.environ.get("C_INCLUDE_PATH", "")
-        print("Compiling libkent...", file=sys.stderr)
-        print("LIBRARY_PATH: " + os.environ.get("LIBRARY_PATH", ""), file=sys.stderr)
-        print("C_INCLUDE_PATH: " + os.environ.get("C_INCLUDE_PATH", ""), file=sys.stderr)
-        check_call(['make', 'build-c'])
-        # Now, proceed to build extension modules
-        _build_ext.run(self)
+_path = os.environ.get("C_INCLUDE_PATH", "")
+if _path:
+    _path = ':'.join(include_dirs + [_path])
+else:
+    _path = ':'.join(include_dirs)
+os.environ["C_INCLUDE_PATH"] = _path
+
+os.environ["INC"] = ' '.join('-I' + d for d in include_dirs)
+
+os.environ['LDFLAGS'] = '-lz -lc -lpthread'
 
 
+# Configuration for the extension module
 def get_ext_modules():
     from Cython.Build import cythonize
     import numpy
 
     ext_modules = [
         Extension(
-            name='bbi.cbbi', 
-            sources=[
-                op.join(thisdir, 'bbi/cbbi.pyx')
-            ],
-            library_dirs=[
-                op.join(thisdir, 'src/x86_64'),
-            ] + extra_library_dirs,
+            name='bbi.cbbi',
+            sources=[op.join(thisdir, 'bbi', 'cbbi.pyx')],
             libraries=[
-                'c', 'z', 'pthread', 'kent',
+                'c',
+                'z',
+                'pthread',
+                'kent',
             ],
-            include_dirs=[
-                numpy.get_include(),
-                op.join(thisdir, 'include'),
-            ] + extra_include_dirs,
+            library_dirs=library_dirs,
+            include_dirs=include_dirs + [numpy.get_include()],
         ),
     ]
     return cythonize(ext_modules)
+
+
+class build_ext(_build_ext):
+    def run(self):
+        # First, build the static C library
+        print("Compiling libkent...", file=sys.stderr)
+        for var in ('LIBRARY_PATH', 'C_INCLUDE_PATH', 'LDFLAGS', 'INC'):
+            print(var + ": "  + os.environ.get(var), file=sys.stderr)
+        check_call(['make', 'build-c'])
+
+        # Now, proceed to build the C extension module
+        _build_ext.run(self)
 
 
 setup(
@@ -141,13 +172,13 @@ setup(
         'numpy',
     ],
     install_requires=[
-        'six', 
+        'six',
         'numpy'
     ],
     tests_require=[
         'pytest'
     ],
-    ext_modules=lazylist(get_ext_modules),
+    ext_modules=delayedlist(get_ext_modules),
     cmdclass={
         'build_ext': build_ext
     }

@@ -16,8 +16,8 @@ export MACHTYPE
 export CC=gcc
 export COPTS=-g -pthread -fPIC -static
 export CFLAGS=-Wall
-export LDFLAGS=-L${current_dir}/src/${MACHTYPE} -L/usr/lib -lz -lc -lpthread
-export INC=-I${current_dir}/include -I${current_dir}/src -I/usr/include
+#export LDFLAGS=-L${current_dir}/src/${MACHTYPE} -lz -lc -lpthread
+#export INC=-I${current_dir}/include -I${current_dir}/src
 export DEFS=-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_GNU_SOURCE -DMACHTYPE_${MACHTYPE}
 
 
