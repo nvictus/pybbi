@@ -4,6 +4,7 @@ from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext as _build_ext
 from subprocess import check_call
 import os.path as op
+import glob
 import sys
 import os
 import re
@@ -53,37 +54,57 @@ def get_version(pkg):
     return version
 
 
-# Paths to propagate to make to build libkent
-extra_library_dirs = []
-extra_include_dirs = []
+# Paths to propagate to make
+extra_library_dirs = [op.join(sys.prefix, 'lib')]
+extra_include_dirs = [op.join(sys.prefix, 'include')]
 
-for dirname in ['libpng16', 'openssl']:
-    inc_dir = op.join(sys.prefix, 'include', dirname)
+
+# OpenSSL
+inc_dirs = [
+    op.join(sys.prefix, 'include', 'openssl'),
+    '/usr/include/openssl',
+]
+for inc_dir in inc_dirs:
+    if op.isdir(inc_dir):
+        extra_include_dirs.append(inc_dir)
+        break
+if sys.platform == "darwin":
+    # https://solitum.net/openssl-os-x-el-capitan-and-brew/
+    lib_dir = '/usr/local/opt/openssl/lib'
+    if op.isdir(lib_dir):
+        extra_library_dirs.append(lib_dir)
+    inc_dir = '/usr/local/opt/openssl/include'
     if op.isdir(inc_dir):
         extra_include_dirs.append(inc_dir)
 
+
+# libPNG
+inc_dirs = glob.glob(op.join(sys.prefix, 'include', 'libpng*'))
+for inc_dir in inc_dirs:
+    if op.isdir(inc_dir):
+        extra_include_dirs.append(inc_dir)
+        break
 if sys.platform == "darwin":
-    # https://solitum.net/openssl-os-x-el-capitan-and-brew/
-    extra_library_dirs += [
-        '/usr/local/opt/openssl/lib'
-    ]
-    extra_include_dirs += [
-        '/usr/local/opt/openssl/include', 
-        '/usr/local/include/libpng16'
-    ]
+    inc_dirs = glob.glob('/usr/local/include/libpng*')
+    for inc_dir in inc_dirs:
+        if op.isdir(inc_dir):
+            extra_include_dirs.append(inc_dir)
 
 
 class build_ext(_build_ext):
     def run(self):
-        # First, compile our C library
+        os.environ['SETUP_PY'] = '1'
         for lib_dir in extra_library_dirs[::-1]:
             os.environ["LIBRARY_PATH"] = lib_dir + ':' + os.environ.get("LIBRARY_PATH", "")
         for inc_dir in extra_include_dirs[::-1]:
             os.environ["C_INCLUDE_PATH"] = inc_dir + ':' + os.environ.get("C_INCLUDE_PATH", "")
+
+        # First, compile our C library: libkent.a
         print("Compiling libkent...", file=sys.stderr)
         print("LIBRARY_PATH: " + os.environ.get("LIBRARY_PATH", ""), file=sys.stderr)
         print("C_INCLUDE_PATH: " + os.environ.get("C_INCLUDE_PATH", ""), file=sys.stderr)
         check_call(['make', 'build-c'])
+
         # Now, proceed to build extension modules
         _build_ext.run(self)
 
@@ -94,7 +115,7 @@ def get_ext_modules():
 
     ext_modules = [
         Extension(
-            name='bbi.cbbi', 
+            name='bbi.cbbi',
             sources=[
                 op.join(thisdir, 'bbi/cbbi.pyx')
             ],
@@ -102,7 +123,7 @@ def get_ext_modules():
                 op.join(thisdir, 'src/x86_64'),
             ] + extra_library_dirs,
             libraries=[
-                'c', 'z', 'pthread', 'kent',
+                'c', 'z', 'pthread', 'ssl', 'crypto', 'kent',
             ],
             include_dirs=[
                 numpy.get_include(),
@@ -141,7 +162,7 @@ setup(
         'numpy',
     ],
     install_requires=[
-        'six', 
+        'six',
         'numpy'
     ],
     tests_require=[
