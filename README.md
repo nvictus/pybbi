@@ -48,10 +48,12 @@ See the docstrings for complete documentation.
 Requires
 - Linux/MacOS
 - C compiler, zlib, pthreads, libpng, openssl, make
-- Python 2.7/3.3+
+- Python 2.7/3.4+
 - `numpy` and `cython`
 
-On fresh Ubuntu instance, you'll need `build-essential`, `make`, `libssl-dev`, `libpng16-dev`. It seems to work on the Windows Subsystem for Linux too.
+On fresh Ubuntu instance, you'll need `build-essential`, `make`, `zlib1g-dev`, `libssl-dev`, `libpng16-dev`. It seems to work on the Windows Subsystem for Linux too.
+
+On a Centos/RedHat (rpm) system you'll need `gcc`, `make`, `zlib-devel`, `openssl-devel`, `libpng-devel`.
 
 `pybbi` is now on PyPI as a source distribution. It ships with (slightly modified) kent utils source, which it will compile before building the extension module.
 
