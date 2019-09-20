@@ -84,11 +84,6 @@ endif
 
 all: build-cython
 
-build-cython: src/$(MACHTYPE)/libkent.a
-	python setup.py build_ext --inplace
-
-build-c: src/$(MACHTYPE)/libkent.a
-
 src/$(MACHTYPE)/libkent.a:
 	cd src && $(MAKE)
 
@@ -112,9 +107,13 @@ clean-build:
 test:
 	pytest
 
+build-c: src/$(MACHTYPE)/libkent.a
+
+build-cython: src/$(MACHTYPE)/libkent.a
+	python setup.py build_ext --inplace
+
 build-sdist: clean-build
 	python setup.py sdist
-	#python setup.py bdist_wheel
 
 # pip install --index-url https://test.pypi.org/simple/ pybbi
 publish-test: build-sdist
