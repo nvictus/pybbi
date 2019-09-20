@@ -3,6 +3,7 @@
 from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext as _build_ext
 from subprocess import check_call
+from distutils import log
 import os.path as op
 import glob
 import sys
@@ -95,17 +96,20 @@ class build_ext(_build_ext):
     def run(self):
         os.environ['SETUP_PY'] = '1'
         for lib_dir in extra_library_dirs[::-1]:
-            os.environ["LIBRARY_PATH"] = lib_dir + ':' + os.environ.get("LIBRARY_PATH", "")
+            os.environ["LIBRARY_PATH"] = \
+                lib_dir + ':' + os.environ.get("LIBRARY_PATH", "")
         for inc_dir in extra_include_dirs[::-1]:
-            os.environ["C_INCLUDE_PATH"] = inc_dir + ':' + os.environ.get("C_INCLUDE_PATH", "")
+            os.environ["C_INCLUDE_PATH"] = \
+                inc_dir + ':' + os.environ.get("C_INCLUDE_PATH", "")
 
         # First, compile our C library: libkent.a
-        print("Compiling libkent...", file=sys.stderr)
-        print("LIBRARY_PATH: " + os.environ.get("LIBRARY_PATH", ""), file=sys.stderr)
-        print("C_INCLUDE_PATH: " + os.environ.get("C_INCLUDE_PATH", ""), file=sys.stderr)
+        log.info("LIBRARY_PATH: " + os.environ.get("LIBRARY_PATH", ""))
+        log.info("C_INCLUDE_PATH: " + os.environ.get("C_INCLUDE_PATH", ""))
+        log.info("Compiling libkent archive...")
         check_call(['make', 'build-c'])
 
         # Now, proceed to build extension modules
+        log.info("Building extension module...")
         _build_ext.run(self)
 
 
