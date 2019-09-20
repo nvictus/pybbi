@@ -63,8 +63,13 @@ cdef extern from "udc.h":
     cdef struct udcFile:
         pass
 
+    char *udcDefaultDir()
+    udcFile *udcFileMayOpen(char *url, char *cacheDir)
+    udcFile *udcFileOpen(char *url, char *cacheDir)
+    void udcFileClose(udcFile **pFile)
 
-cdef extern from "sig.h": 
+
+cdef extern from "sig.h":
     bits32 bigWigSig
     bits32 bigBedSig
 
@@ -93,7 +98,7 @@ cdef extern from "bbiFile.h":
         bits16 extensionSize
         bits16 extraIndexCount
         bits64 extraIndexListOffset
-    
+
     cdef struct bbiChromInfo:
         bbiChromInfo *next
         char *name
@@ -113,9 +118,9 @@ cdef extern from "bbiFile.h":
 
     cdef enum bbiSummaryType:
         bbiSumMean = 0
-        bbiSumMax = 1 
-        bbiSumMin = 2 
-        bbiSumCoverage = 3 
+        bbiSumMax = 1
+        bbiSumMin = 2
+        bbiSumCoverage = 3
         bbiSumStandardDeviation = 4
 
     cdef struct bbiSummary:
@@ -137,10 +142,10 @@ cdef extern from "bbiFile.h":
         double sumSquares
 
     ctypedef bbiInterval *(*BbiFetchIntervals)(
-        bbiFile *bbi, 
-        char *chrom, 
-        bits32 start, 
-        bits32 end, 
+        bbiFile *bbi,
+        char *chrom,
+        bits32 start,
+        bits32 end,
         lm *lm)
 
     bbiFile *bbiFileOpen(char *fileName, bits32 sig, char *typeName)
@@ -153,71 +158,71 @@ cdef extern from "bbiFile.h":
         bbiZoomLevel *levelList,
         int desiredReduction)
     bits32 bbiIntervalSlice(
-        bbiFile *bbi, 
+        bbiFile *bbi,
         bits32 baseStart,
-        bits32 baseEnd, 
-        bbiInterval *intervalList, 
+        bits32 baseEnd,
+        bbiInterval *intervalList,
         bbiSummaryElement *el)
     bits32 bbiSummarySlice(
-        bbiFile *bbi, 
+        bbiFile *bbi,
         bits32 baseStart,
-        bits32 baseEnd, 
-        bbiSummary *sumList, 
+        bits32 baseEnd,
+        bbiSummary *sumList,
         bbiSummaryElement *el)
     bbiSummary *bbiSummariesInRegion(
-        bbiZoomLevel *zoom, 
-        bbiFile *bbi, 
-        int chromId, 
-        bits32 start, 
+        bbiZoomLevel *zoom,
+        bbiFile *bbi,
+        int chromId,
+        bits32 start,
         bits32 end)
     boolean bbiSummaryArrayFromZoom(
-        bbiZoomLevel *zoom, 
-        bbiFile *bbi, 
-        char *chrom, 
-        bits32 start, 
+        bbiZoomLevel *zoom,
+        bbiFile *bbi,
+        char *chrom,
+        bits32 start,
         bits32 end,
-        int summarySize, 
+        int summarySize,
         bbiSummaryElement *summary)
     boolean bbiSummaryArrayFromFull(
-        bbiFile *bbi, 
-        char *chrom, 
-        bits32 start, 
-        bits32 end, 
+        bbiFile *bbi,
+        char *chrom,
+        bits32 start,
+        bits32 end,
         BbiFetchIntervals fetchIntervals,
-        int summarySize, 
+        int summarySize,
         bbiSummaryElement *summary)
     boolean bbiSummaryArray(
-        bbiFile *bbi, 
-        char *chrom, 
-        bits32 start, 
-        bits32 end, 
-        BbiFetchIntervals fetchIntervals, 
-        bbiSummaryType summaryType, 
-        int summarySize, 
+        bbiFile *bbi,
+        char *chrom,
+        bits32 start,
+        bits32 end,
+        BbiFetchIntervals fetchIntervals,
+        bbiSummaryType summaryType,
+        int summarySize,
         double *summaryValues)
     boolean bbiSummaryArrayExtended(
-        bbiFile *bbi, 
-        char *chrom, 
-        bits32 start, 
-        bits32 end, 
-        BbiFetchIntervals fetchIntervals, 
-        int summarySize, 
+        bbiFile *bbi,
+        char *chrom,
+        bits32 start,
+        bits32 end,
+        BbiFetchIntervals fetchIntervals,
+        int summarySize,
         bbiSummaryElement *summary)
     bbiSummaryElement bbiTotalSummary(
         bbiFile *bbi)
-    
+
     # Functions that were declared static (private) in bbiRead.c
     # Source was modified to expose them here via bbiFile.h
     int bbiChromId(bbiFile *bbi, char *chrom)
     bits32 bbiIntervalSlice(
-        bbiFile *bbi, 
-        bits32 baseStart, 
+        bbiFile *bbi,
+        bits32 baseStart,
         bits32 baseEnd,
-        bbiInterval *intervalList, 
+        bbiInterval *intervalList,
         bbiSummaryElement *el)
     bits32 bbiSummarySlice(
-        bbiFile *bbi, 
-        bits32 baseStart, 
+        bbiFile *bbi,
+        bits32 baseStart,
         bits32 baseEnd,
         bbiSummary *sumList,
         bbiSummaryElement *el)
@@ -226,8 +231,8 @@ cdef extern from "bbiFile.h":
     # Source was modified to expose them here via bbiFile.h
     bbiInterval *bigBedCoverageIntervals(
         bbiFile *bbi,
-        char *chrom, 
-        bits32 start, 
+        char *chrom,
+        bits32 start,
         bits32 end,
         lm *lm)
 
@@ -236,33 +241,33 @@ cdef extern from "bigWig.h":
     boolean isBigWig(char *fileName)
     bbiFile *bigWigFileOpen(char *fileName)
     bbiInterval *bigWigIntervalQuery(
-        bbiFile *bwf, 
+        bbiFile *bwf,
         char *chrom,
         bits32 start,
         bits32 end,
         lm *lm)
     double bigWigSingleSummary(
-        bbiFile *bwf, 
+        bbiFile *bwf,
         char *chrom,
         int start,
         int end,
-        bbiSummaryType summaryType, 
+        bbiSummaryType summaryType,
         double defaultVal);
     boolean bigWigSummaryArray(
-        bbiFile *bwf, 
+        bbiFile *bwf,
         char *chrom,
         bits32 start,
         bits32 end,
-        bbiSummaryType summaryType, 
-        int summarySize, 
+        bbiSummaryType summaryType,
+        int summarySize,
         double *summaryValues)
     boolean bigWigSummaryArrayExtended(
-        bbiFile *bwf, 
+        bbiFile *bwf,
         char *chrom,
         bits32 start,
         bits32 end,
-        int summarySize, 
-        bbiSummaryElement *summary)    
+        int summarySize,
+        bbiSummaryElement *summary)
 
 
 cdef extern from "bigBed.h":
@@ -276,31 +281,31 @@ cdef extern from "bigBed.h":
     #void bigBedFileClose(bbiFile **pBwf)
     bits64 bigBedItemCount(bbiFile *bbi)
     bigBedInterval *bigBedIntervalQuery(
-        bbiFile *bbi, 
+        bbiFile *bbi,
         char *chrom,
-        bits32 start, 
-        bits32 end, 
+        bits32 start,
+        bits32 end,
         int maxItems,
         lm *lm)
     int bigBedIntervalToRow(
-        bigBedInterval *interval, 
-        char *chrom, 
-        char *startBuf, 
+        bigBedInterval *interval,
+        char *chrom,
+        char *startBuf,
         char *endBuf,
-        char **row, 
+        char **row,
         int rowSize)
     boolean bigBedSummaryArray(
-        bbiFile *bbi, 
-        char *chrom, 
-        bits32 start, 
+        bbiFile *bbi,
+        char *chrom,
+        bits32 start,
         bits32 end,
-        bbiSummaryType summaryType, 
-        int summarySize, 
+        bbiSummaryType summaryType,
+        int summarySize,
         double *summaryValues)
     boolean bigBedSummaryArrayExtended(
-        bbiFile *bbi, 
-        char *chrom, 
-        bits32 start, 
+        bbiFile *bbi,
+        char *chrom,
+        bits32 start,
         bits32 end,
         int summarySize,
         bbiSummaryElement *summary);

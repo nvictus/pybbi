@@ -53,14 +53,25 @@ def test_fetch(path):
         bbi.fetch(path, 'chr1', 0, 1000)
 
 
-@pytest.mark.parametrize(('path', 'url'), (bbi_paths, bbi_urls))
-def test_fetch_remote(path, url):
+def test_fetch_remote():
     x_local = bbi.fetch(BW_FILE, 'chr21', 0, 100)
     x_remote = bbi.fetch(BW_URL, 'chr21', 0, 100)
     assert np.allclose(x_local, x_remote, equal_nan=True)
 
     x_local = bbi.fetch(BB_FILE, 'chr21', 0, 100)
     x_remote = bbi.fetch(BB_URL, 'chr21', 0, 100)
+    assert np.allclose(x_local, x_remote, equal_nan=True)
+
+
+def test_fetch_remote_https():
+    x_local = bbi.fetch(BW_FILE, 'chr21', 0, 100)
+    x_remote = bbi.fetch(
+        BW_URL.replace('http://', 'https://'), 'chr21', 0, 100)
+    assert np.allclose(x_local, x_remote, equal_nan=True)
+
+    x_local = bbi.fetch(BB_FILE, 'chr21', 0, 100)
+    x_remote = bbi.fetch(
+        BB_URL.replace('http://', 'https://'), 'chr21', 0, 100)
     assert np.allclose(x_local, x_remote, equal_nan=True)
 
 
@@ -101,10 +112,21 @@ def test_fetch_summary_stats(path):
     assert np.allclose(x, y)
 
     values = bbi.fetch(path, 'chr21', 20000000, 20001000)
-    vmin = bbi.fetch(path, 'chr21', 20000000, 20001000, bins=10, summary='min').min()
+    vmin = bbi.fetch(
+        path, 'chr21', 20000000, 20001000, bins=10, summary='min'
+    ).min()
     assert np.isclose(vmin, np.min(values))
-    vmax = bbi.fetch(path, 'chr21', 20000000, 20001000, bins=10, summary='max').max()
+    vmax = bbi.fetch(
+        path, 'chr21', 20000000, 20001000, bins=10, summary='max'
+    ).max()
     assert np.isclose(vmax, np.max(values))
 
     with pytest.raises(ValueError):
         bbi.fetch(path, 'chr21', 20000000, 20001000, bins=10, summary='foo')
+
+
+@pytest.mark.xfail
+def test_aws_403_redirect():
+    # See https://stat.ethz.ch/pipermail/bioc-devel/2016-May/009241.html
+    url = 'https://www.encodeproject.org/files/ENCFF620UMO/@@download/ENCFF620UMO.bigWig'
+    bbi.fetch(url, 'chr21', 0, 1000)

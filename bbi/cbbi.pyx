@@ -18,7 +18,9 @@ if sys.version_info.major > 2:
 else:
     from contextlib import closing
     _urlopen = urlopen
-    urlopen = lambda *a, **kw: closing(_urlopen(*a, **kw))
+
+    def urlopen(*a, **kw):
+        return closing(_urlopen(*a, **kw))
 
     def bytes_to_int(b, byteorder):
         from struct import unpack
@@ -43,6 +45,8 @@ def _read_magic(str uri):
             if code >= 400:
                 raise OSError("Status {}: Couldn't open {}".format(code, uri))
             magic_bytes = r.read(4)
+        if not _ucsc_may_open_url(uri):
+            raise RuntimeError("UCSC lib cannot open this URL")
     return magic_bytes
 
 
@@ -56,6 +60,16 @@ def _check_sig(str uri):
         return bigBedSig
     else:
         return 0
+
+
+def _ucsc_may_open_url(str url):
+    cdef bytes bUrl = url.encode('utf-8')
+    f = udcFileMayOpen(bUrl, udcDefaultDir())
+    if f == NULL:
+        return False
+    else:
+        udcFileClose(&f)
+        return True
 
 
 cpdef dict BBI_SUMMARY_TYPES = {
@@ -146,12 +160,12 @@ def chromsizes(str inFile):
 
     # traverse the chromosome list
     cdef bbiChromInfo *chromList = bbiChromList(bbi)
-    cdef bbiChromInfo *info = chromList 
+    cdef bbiChromInfo *info = chromList
     cdef list c_list = []
     while info != NULL:
-        c_list.append( (<bytes>(info.name).decode('ascii'), info.size) )
+        c_list.append((<bytes>(info.name).decode('ascii'), info.size))
         info = info.next
-    
+
     # clean up
     bbiChromInfoFreeList(&chromList)
     bbiFileClose(&bbi)
@@ -189,9 +203,9 @@ def zooms(str inFile):
     cdef bbiZoomLevel *zoom = bbi.levelList
     cdef list z_list = []
     while zoom != NULL:
-        z_list.append( zoom.reductionLevel )
+        z_list.append(zoom.reductionLevel)
         zoom = zoom.next
-    
+
     # clean up
     bbiFileClose(&bbi)
 
@@ -249,12 +263,12 @@ def info(str inFile):
 
 def fetch_intervals(
         str inFile,
-        str chrom, 
-        int start, 
+        str chrom,
+        int start,
         int end):
     """
-    Return a generator that iterates over the records of data intervals in a bbi
-    file overlapping a specified genomic query interval.
+    Return a generator that iterates over the records of data intervals in a
+    bbi file overlapping a specified genomic query interval.
 
     Parameters
     ----------
@@ -326,7 +340,7 @@ def fetch_intervals(
             bwInterval = bwInterval.next
     else:
         bbInterval = bigBedIntervalQuery(bbi, chromName, validStart, validEnd, 0, lm)
-        while bbInterval != NULL: 
+        while bbInterval != NULL:
             cRest = bbInterval.rest
             if cRest != NULL:
                 bRest = cRest
@@ -346,16 +360,16 @@ def fetch_intervals(
 
 def fetch(
         str inFile,
-        str chrom, 
-        int start, 
-        int end, 
-        int bins=-1, 
-        double missing=0.0, 
+        str chrom,
+        int start,
+        int end,
+        int bins=-1,
+        double missing=0.0,
         double oob=np.nan,
         str summary='mean'):
     """
-    Read the signal data in a bbi file overlapping a genomic query interval into
-    a numpy array. 
+    Read the signal data in a bbi file overlapping a genomic query interval
+    into a numpy array.
 
     If a number of bins is requested, this will interpolate the file's stored
     "summary" data at the closest available zoom level. Otherwise, the data
@@ -368,14 +382,14 @@ def fetch(
     chrom : str
         Chromosome name.
     start : int
-        Start coordinate. If start is less than zero, the beginning of the track
-        is not truncated but treated as out of bounds.
+        Start coordinate. If start is less than zero, the beginning of the
+        track is not truncated but treated as out of bounds.
     end : int
         End coordinate. If end is less than zero, the end is set to the
         chromosome size. If end is greater than the chromosome size, the end of
         the track is not truncated but treated as out of bounds.
     bins : int, optional
-        Number of bins to divide the query interval into for coarsegraining. 
+        Number of bins to divide the query interval into for coarsegraining.
         Default (-1) means no summarization (i.e., 1 bp bins).
     missing : float, optional
         Fill-in value for unreported data in valid regions. Default is 0.
@@ -427,7 +441,7 @@ def fetch(
         raise ValueError(
             "Interval cannot have negative length:"
             " start = {}, end = {}.".format(start, end))
-    
+
     # prepare the output
     cdef boolean is_summary = True
     if bins < 1:
@@ -445,14 +459,14 @@ def fetch(
         except KeyError:
             raise ValueError(
                 'Invalid summary type "{}". Must be one of: {}.'.format(
-                summary,
-                set(BBI_SUMMARY_TYPES.keys())))
+                    summary,
+                    set(BBI_SUMMARY_TYPES.keys())))
         array_query_summarized(
-            out, bins, bbi, fetcher, 
+            out, bins, bbi, fetcher,
             chromName, start, end, chromSize, oob, summary_type)
     else:
         array_query_full(
-            out, bins, bbi, fetcher, 
+            out, bins, bbi, fetcher,
             chromName, start, end, chromSize, oob)
 
     # clean up
@@ -462,7 +476,7 @@ def fetch(
 
 
 def stackup(
-        str inFile, 
+        str inFile,
         chroms,
         starts,
         ends,
@@ -487,7 +501,8 @@ def stackup(
         chromosome size. If end is greater than the chromosome size, the end of
         the track is not truncated but treated as out of bounds.
     bins : int
-        Number of bins to summarize the data. Default (-1) means no aggregation.
+        Number of bins to summarize the data. Default (-1) means no
+        aggregation.
     missing : float
         Fill-in value for unreported data in valid regions. Default is 0.
     oob : float
@@ -512,7 +527,7 @@ def stackup(
     if len(chroms_) != len(starts_) or len(starts_) != len(ends_):
         raise ValueError(
             "`chroms`, `starts`, and `ends` must have the same length")
-    
+
     # open the file
     cdef bits32 sig = _check_sig(inFile)
     cdef bytes bInFile = inFile.encode('utf-8')
@@ -530,7 +545,7 @@ def stackup(
     # check the coordinate inputs
     if not len(np.unique(ends_ - starts_)) == 1:
         raise ValueError("Query windows must have equal size")
-    
+
     # prepare output
     cdef int length = ends_[0] - starts_[0]
     cdef int n = chroms_.shape[0]
@@ -557,7 +572,7 @@ def stackup(
                 "Start exceeds the chromosome length, {}.".format(chromSize))
         if bins < 1:
             array_query_full(
-                out[i, :], bins, bbi, fetcher, 
+                out[i, :], bins, bbi, fetcher,
                 chromName, start, end, chromSize, oob)
         else:
             try:
@@ -565,12 +580,12 @@ def stackup(
             except KeyError:
                 raise ValueError(
                     'Invalid summary type "{}". Must be one of: {}.'.format(
-                    summary,
-                    set(BBI_SUMMARY_TYPES.keys())))
+                        summary,
+                        set(BBI_SUMMARY_TYPES.keys())))
             array_query_summarized(
-                out[i, :], bins, bbi, fetcher, 
+                out[i, :], bins, bbi, fetcher,
                 chromName, start, end, chromSize, oob, summary_type)
-            
+
     # clean up
     bbiFileClose(&bbi)
 
@@ -578,11 +593,11 @@ def stackup(
 
 
 cdef inline void array_query_full(
-        np.ndarray[np.double_t, ndim=1] out, 
+        np.ndarray[np.double_t, ndim=1] out,
         int nbins,
-        bbiFile *bbi, 
+        bbiFile *bbi,
         BbiFetchIntervals fetchIntervals,
-        bytes chromName, 
+        bytes chromName,
         int start,
         int end,
         int chromSize,
@@ -611,7 +626,7 @@ cdef inline void array_query_full(
             saveStart = interval.start
             saveVal = interval.val
             firstTime = False
-        elif not ( (interval.start == prevEnd) and (interval.val == saveVal) ):
+        elif not ((interval.start == prevEnd) and (interval.val == saveVal)):
             out[saveStart-start:prevEnd-start] = saveVal
             saveStart = interval.start
             saveVal = interval.val
@@ -632,22 +647,22 @@ cdef inline void array_query_full(
 cdef double var_from_sums(double sum, double sumSquares, bits64 n):
     cdef double var = sumSquares - sum*sum/n
     if n > 1:
-        var /= n -1
+        var /= n - 1
     return var
 
 
 cdef inline void array_query_summarized(
-        np.ndarray[np.double_t, ndim=1] out, 
+        np.ndarray[np.double_t, ndim=1] out,
         int nbins,
-        bbiFile *bbi, 
-        BbiFetchIntervals fetchIntervals, 
-        bytes chromName, 
+        bbiFile *bbi,
+        BbiFetchIntervals fetchIntervals,
+        bytes chromName,
         int start,
         int end,
         int chromSize,
         double oob,
         bbiSummaryType summaryType):
-    
+
     # Clip the query range
     cdef int validStart = start, validEnd = end
     if start < 0:
@@ -666,18 +681,19 @@ cdef inline void array_query_summarized(
     # Create and populate summary elements
     cdef boolean result = False
     cdef bbiSummaryElement *elements
-    AllocArray(elements, nbins)    
+    AllocArray(elements, nbins)
     if zoomObj != NULL:
-        result = _bbiSummariesFromZoom(bbi, zoomObj,
-            chromName, start, end, validStart, validEnd, 
+        result = _bbiSummariesFromZoom(
+            bbi, zoomObj,
+            chromName, start, end, validStart, validEnd,
             elements, nbins)
     else:
-        result = _bbiSummariesFromFull(bbi, fetchIntervals,
-            chromName, start, end, validStart, validEnd, 
+        result = _bbiSummariesFromFull(
+            bbi, fetchIntervals,
+            chromName, start, end, validStart, validEnd,
             elements, nbins)
 
     # Fill output array
-    #cdef bbiSummaryType summaryType = bbiSumMean  # Support only mean for now
     cdef double covFactor = <double>nbins / (end - start)
     cdef bbiSummaryElement *el
     cdef double val
@@ -686,7 +702,7 @@ cdef inline void array_query_summarized(
         for i in range(nbins):
             loc = start + i*stepSize
             if loc < validStart or loc >= validEnd:
-                out[i] = oob 
+                out[i] = oob
             else:
                 el = &elements[i]
                 if el.validCount > 0:
@@ -707,14 +723,14 @@ cdef inline void array_query_summarized(
                     out[i] = val
 
     # Destroy summary elements
-    freeMem(elements)    
+    freeMem(elements)
 
 
 cdef boolean _bbiSummariesFromZoom(
-       bbiFile *bbi, 
+       bbiFile *bbi,
        bbiZoomLevel *zoom,
-       bytes chromName, 
-       int start, 
+       bytes chromName,
+       int start,
        int end,
        int validStart,
        int validEnd,
@@ -730,7 +746,7 @@ cdef boolean _bbiSummariesFromZoom(
     # Find appropriate zoom-level summary data
     cdef bbiSummary *summList = bbiSummariesInRegion(
         zoom, bbi, chromId, validStart, validEnd)
-    
+
     # Interpolate the summary data
     cdef boolean result = False
     cdef np.int64_t baseCount = end - start
@@ -760,10 +776,10 @@ cdef boolean _bbiSummariesFromZoom(
 
 
 cdef boolean _bbiSummariesFromFull(
-        bbiFile *bbi, 
+        bbiFile *bbi,
         BbiFetchIntervals fetchIntervals,
-        bytes chromName, 
-        int start, 
+        bytes chromName,
+        int start,
         int end,
         int validStart,
         int validEnd,
@@ -775,7 +791,7 @@ cdef boolean _bbiSummariesFromFull(
     cdef lm *lm = lmInit(0)
     cdef bbiInterval *intervalList = NULL
     intervalList = fetchIntervals(bbi, chromName, validStart, validEnd, lm)
-    
+
     # Interpolate the interval data
     cdef boolean result = False
     cdef np.int64_t baseCount = end - start
@@ -802,7 +818,7 @@ cdef boolean _bbiSummariesFromFull(
 
             # Next time round start where we left off.
             baseStart = baseEnd
-        
+
     lmCleanup(&lm)
-    
+
     return result
