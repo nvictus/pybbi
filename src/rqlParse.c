@@ -64,6 +64,15 @@ switch (op)
     case rqlOpNot:
         return "rqlOpNot";
 
+    case rqlOpAdd:
+	return "rqlOpAdd";
+    case rqlOpSubtract:
+	return "rqlOpSubtract";
+    case rqlOpMultiply:
+	return "rqlOpMultiply";
+    case rqlOpDivide:
+	return "rqlOpDivide";
+
     case rqlOpUnaryMinusInt:
         return "rqlOpUnaryMinusInt";
     case rqlOpUnaryMinusDouble:
@@ -86,7 +95,7 @@ switch (type)
         fprintf(f, "%s", (val.b ? "true" : "false") );
 	break;
     case rqlTypeString:
-        fprintf(f, "%s", val.s);
+        fprintf(f, "%s", (val.s == NULL ? "(null)" : val.s));
 	break;
     case rqlTypeInt:
         fprintf(f, "%lld", val.i);
@@ -120,7 +129,7 @@ static void skipOverRequired(struct tokenizer *tkz, char *expecting)
 /* Make sure that next token is tok, and skip over it. */
 {
 tokenizerMustHaveNext(tkz);
-if (!sameString(tkz->string, expecting))
+if (!sameWord(tkz->string, expecting))
     expectingGot(tkz, expecting, tkz->string);
 }
 
@@ -146,7 +155,22 @@ else if (isalpha(c) || c == '_')
     {
     p->op = rqlOpSymbol;
     p->type = rqlTypeString;	/* String until promoted at least. */
-    p->val.s = cloneString(tok);
+    struct dyString *dy = dyStringNew(64);
+    for (;;)
+	{
+	dyStringAppend(dy, tok);
+	if ((tok = tokenizerNext(tkz)) == NULL)
+	    break;
+	if (tok[0] != '.')
+	    {
+	    tokenizerReuse(tkz);
+	    break;
+	    }
+	dyStringAppend(dy, tok);
+	if ((tok = tokenizerNext(tkz)) == NULL)
+	    break;
+	}
+    p->val.s = dyStringCannibalize(&dy);
     }
 else if (isdigit(c))
     {
@@ -302,6 +326,7 @@ else if (tok[0] == '[')
     p->op = rqlOpArrayIx;
     p->type = rqlTypeString;
     p->children = collection;
+    p->val.s = cloneString("");
     collection->next = index;
     }
 else
@@ -344,7 +369,7 @@ static boolean eatMatchingTok(struct tokenizer *tkz, char *s)
 /* If next token matches s then eat it and return TRUE */
 {
 char *tok = tokenizerNext(tkz);
-if (tok != NULL && sameString(tok, s))
+if (tok != NULL && sameWord(tok, s))
     return TRUE;
 else
     {
@@ -353,10 +378,94 @@ else
     }
 }
 
+static struct rqlParse *rqlParseProduct(struct tokenizer *tkz)
+/* Parse out plus or minus. */
+{
+struct rqlParse *p = rqlParseUnaryMinus(tkz);
+for (;;)
+    {
+    enum rqlOp op = rqlOpUnknown;
+    char *tok = tokenizerNext(tkz);
+    if (tok != NULL)
+	{
+	if (sameString(tok, "*"))
+	    op = rqlOpMultiply;
+	else if (sameString(tok, "/"))
+	    op = rqlOpDivide;
+	}
+    if (op == rqlOpUnknown)  // No binary operation token, just return what we have so far
+	{
+	tokenizerReuse(tkz);
+	return p;
+	}
+
+    /* What we've parsed so far becomes left side of binary op, next term ends up on right. */
+    struct rqlParse *l = p;
+    struct rqlParse *r = rqlParseUnaryMinus(tkz);
+
+    /* Make left and right side into a common type */
+    enum rqlType childType = commonTypeForBop(l->type, r->type);
+    l = rqlParseCoerce(l, childType);
+    r = rqlParseCoerce(r, childType);
+
+    /* Create the binary operation */
+    AllocVar(p);
+    p->op = op;
+    p->type = childType;
+
+    /* Now hang children onto node. */
+    p->children = l;
+    l->next = r;
+    }
+}
+
+
+static struct rqlParse *rqlParseSum(struct tokenizer *tkz)
+/* Parse out plus or minus. */
+{
+struct rqlParse *p = rqlParseProduct(tkz);
+for (;;)
+    {
+    enum rqlOp op = rqlOpUnknown;
+    char *tok = tokenizerNext(tkz);
+    if (tok != NULL)
+	{
+	if (sameString(tok, "+"))
+	    op = rqlOpAdd;
+	else if (sameString(tok, "-"))
+	    op = rqlOpSubtract;
+	}
+    if (op == rqlOpUnknown)  // No binary operation token, just return what we have so far
+	{
+	tokenizerReuse(tkz);
+	return p;
+	}
+
+    /* What we've parsed so far becomes left side of binary op, next term ends up on right. */
+    struct rqlParse *l = p;
+    struct rqlParse *r = rqlParseProduct(tkz);
+
+    /* Make left and right side into a common type */
+    enum rqlType childType = commonTypeForBop(l->type, r->type);
+    l = rqlParseCoerce(l, childType);
+    r = rqlParseCoerce(r, childType);
+
+    /* Create the binary operation */
+    AllocVar(p);
+    p->op = op;
+    p->type = childType;
+
+    /* Now hang children onto node. */
+    p->children = l;
+    l->next = r;
+    }
+}
+
+
 static struct rqlParse *rqlParseCmp(struct tokenizer *tkz)
 /* Parse out comparison. */
 {
-struct rqlParse *l = rqlParseUnaryMinus(tkz);
+struct rqlParse *l = rqlParseSum(tkz);
 struct rqlParse *p = l;
 char *tok = tokenizerNext(tkz);
 boolean forceString = FALSE;
@@ -387,14 +496,14 @@ if (tok != NULL)
 	else
 	    op = rqlOpLt;
 	}
-    else if (sameString(tok, "not"))
+    else if (sameWord(tok, "not"))
         {
 	forceString = TRUE;
 	op = rqlOpLike;
 	needNot = TRUE;
 	skipOverRequired(tkz, "like");
 	}
-    else if (sameString(tok, "like"))
+    else if (sameWord(tok, "like"))
         {
 	forceString = TRUE;
 	op = rqlOpLike;
@@ -404,7 +513,7 @@ if (tok != NULL)
 	tokenizerReuse(tkz);
 	return p;
 	}
-    struct rqlParse *r = rqlParseUnaryMinus(tkz);
+    struct rqlParse *r = rqlParseSum(tkz);
     AllocVar(p);
     p->op = op;
     p->type = rqlTypeBoolean;
@@ -447,7 +556,7 @@ static struct rqlParse *rqlParseNot(struct tokenizer *tkz)
 /* parse out a logical not. */
 {
 char *tok = tokenizerNext(tkz);
-if (sameString(tok, "not"))
+if (sameWord(tok, "not"))
     {
     struct rqlParse *p = rqlParseCoerce(rqlParseCmp(tkz), rqlTypeBoolean);
     struct rqlParse *n;
@@ -472,7 +581,7 @@ struct rqlParse *parent = NULL;
 for (;;)
     {
     char *tok = tokenizerNext(tkz);
-    if (tok == NULL || !sameString(tok, "and"))
+    if (tok == NULL || !sameWord(tok, "and"))
         {
 	tokenizerReuse(tkz);
 	return p;
@@ -502,7 +611,7 @@ struct rqlParse *parent = NULL;
 for (;;)
     {
     char *tok = tokenizerNext(tkz);
-    if (tok == NULL || !sameString(tok, "or"))
+    if (tok == NULL || !sameWord(tok, "or"))
         {
 	tokenizerReuse(tkz);
 	return p;
@@ -590,14 +699,14 @@ tkz->leaveQuotes = TRUE;
 struct rqlStatement *rql;
 AllocVar(rql);
 rql->command = cloneString(tokenizerMustHaveNext(tkz));
-if (sameString(rql->command, "select"))
+if (sameWord(rql->command, "select"))
     {
     struct dyString *buf = dyStringNew(0);
     struct slName *list = NULL;
     char *tok = rqlParseFieldSpec(tkz, buf);
     /* Look for count(*) as special case. */
     boolean countOnly = FALSE;
-    if (sameString(tok, "count"))
+    if (sameWord(tok, "count"))
         {
 	char *paren = tokenizerNext(tkz);
 	if (paren[0] == '(')
@@ -635,7 +744,7 @@ if (sameString(rql->command, "select"))
 	}
     dyStringFree(&buf);
     }
-else if (sameString(rql->command, "count"))
+else if (sameWord(rql->command, "count"))
     {
     /* No parameters to count. */
     }
@@ -645,7 +754,7 @@ else
 char *from = tokenizerNext(tkz);
 if (from != NULL)
     {
-    if (sameString(from, "from"))
+    if (sameWord(from, "from"))
         {
 	for (;;)
 	    {
@@ -673,7 +782,7 @@ if (from != NULL)
 char *where = tokenizerNext(tkz);
 if (where != NULL)
     {
-    if (!sameString(where, "where"))
+    if (!sameWord(where, "where"))
 	{
         tokenizerReuse(tkz);
 	}
@@ -689,7 +798,7 @@ char *limit = tokenizerNext(tkz);
 rql->limit = -1;	
 if (limit != NULL)
     {
-    if (!sameString(limit, "limit"))
+    if (!sameWord(limit, "limit"))
         errAbort("Unknown clause '%s' line %d of %s", limit, lf->lineIx, lf->fileName);
     char *count = tokenizerMustHaveNext(tkz);
     if (!isdigit(count[0]))
@@ -714,6 +823,108 @@ struct rqlStatement *rql = rqlStatementParse(lf);
 lineFileClose(&lf);
 return rql;
 }
+
+// Specialized wildHash could be added to hash.c, but will be so rarely used.
+// It's purpose here is for wildCard tagTypes (e.g. "*Filter") which get
+// loaded into an RA hash but require specialized hashFindVal to pick them up.
+#define WILD_CARD_HASH_BIN "[wildCardHash]"
+#define WILD_CARD_HASH_EMPTY "[]"
+int wildExpressionCmp(const void *va, const void *vb)
+/* Compare two slPairs. */
+{
+const struct slPair *a = *((struct slPair **)va);
+const struct slPair *b = *((struct slPair **)vb);
+return (strlen(a->name) - strlen(b->name));
+}
+
+struct slPair *wildHashMakeList(struct hash *hash)
+/* Makes a sub hash containing a list of hash elements whose names contain wildcards ('*', '?').
+   The sub hash will be put into WILD_CARD_HASH_BIN for use by wildHashLookup(). */
+{
+struct slPair *wildList = NULL;
+struct hashEl* hel = NULL;
+struct hashCookie cookie = hashFirst(hash);
+while ((hel = hashNext(&cookie)) != NULL)
+    {
+    if (strchr(hel->name,'*') != NULL || strchr(hel->name,'?') != NULL)
+        slPairAdd(&wildList, hel->name, hel);
+    }
+if (wildList == NULL)                                 // Note: adding an "empty" pair will
+    slPairAdd(&wildList, WILD_CARD_HASH_EMPTY, NULL); //       prevent rebuilding this list
+else if (slCount(wildList) > 1)
+    slSort(&wildList,wildExpressionCmp); // sort on length, so the most restrictive
+                                         // wildcard match goes first?
+hashAdd(hash, WILD_CARD_HASH_BIN, wildList);
+return wildList;
+}
+
+struct hashEl *wildHashLookup(struct hash *hash, char *name)
+/* If wildcards are in hash, then look up var in "wildCardHash" bin. */
+{
+struct slPair *wild = hashFindVal(hash, WILD_CARD_HASH_BIN);
+if (wild == NULL)  // Hasn't been made yet.
+    wild = wildHashMakeList(hash);
+if (wild == NULL
+|| (slCount(wild) == 1 && sameString(wild->name,WILD_CARD_HASH_EMPTY)))
+    return NULL; // Empty list means hash contains no names with wildcards
+
+for ( ;wild != NULL; wild=wild->next)
+    if (wildMatch(wild->name,name))
+        return wild->val;
+
+return NULL;
+}
+
+static void *wildHashFindVal(struct hash *hash, char *name)
+/* If wildcards are in hash, then look up var in "wildCardHash" bin. */
+{
+struct hashEl *hel = wildHashLookup(hash,name);
+if (hel != NULL)
+    return hel->val;
+return NULL;
+}
+
+static struct hashEl *hashLookupEvenInWilds(struct hash *hash, char *name)
+/* Lookup hash el but if no exact match look for wildcards in hash and then match. */
+{
+struct hashEl *hel = hashLookup(hash, name);
+if (hel == NULL)
+    hel = wildHashLookup(hash, name);
+return hel;
+}
+
+void *rqlHashFindValEvenInWilds(struct hash *hash, char *name)
+/* Find hash val but if no exact match look for wildcards in hash and then match. */
+{
+void *val = hashFindVal(hash, name);
+if (val == NULL)
+    val = wildHashFindVal(hash, name);
+return val;
+}
+
+
+void rqlCheckFieldsExist(struct rqlStatement *rql, 
+    struct hash *fieldsThatExist, char *fieldSource)
+/* Check that all fields referenced in an rql statement actually exist.
+ * fieldsThatExist is a hash of field names, and fieldSource is where they came from. */
+{
+/* Do checks that tags are all legitimate and with correct types. */
+struct slName *field;
+for (field = rql->fieldList; field != NULL; field = field->next)
+    {
+    if (!anyWild(field->name))
+	if (!hashLookupEvenInWilds(fieldsThatExist, field->name))
+	    errAbort("Field %s in query doesn't exist in %s.", field->name, fieldSource);
+    }
+struct slName *var;
+for (var = rql->whereVarList; var != NULL; var = var->next)
+    {
+    if (!hashLookupEvenInWilds(fieldsThatExist, var->name))
+        errAbort("Tag %s doesn't exist. Maybe you mispelled a variable or forgot to put quotes "
+                 "around\na word? Maybe %s is hosed?.", var->name, fieldSource);
+    }
+}
+
 
 void rqlStatementDump(struct rqlStatement *rql, FILE *f)
 /* Print out statement to file. */
@@ -773,4 +984,3 @@ if (rql != NULL)
     freez(pRql);
     }
 }
-

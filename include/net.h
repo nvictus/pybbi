@@ -9,6 +9,7 @@
 
 #include "linefile.h"
 #include "dystring.h"
+#include "internet.h"
 
 #define DEFAULTCONNECTTIMEOUTMSEC 10000  /* default connect timeout for tcp in milliseconds */
 #define DEFAULTREADWRITETTIMEOUTSEC 120  /* default read/write timeout for tcp in seconds */
@@ -30,20 +31,17 @@ int netMustConnectTo(char *hostName, char *portName);
 /* Start connection with a server and a port that needs to be converted to integer */
 
 int netAcceptingSocket(int port, int queueSize);
-/* Create a socket for to accept connections. */
-
-int netAcceptingSocketFrom(int port, int queueSize, char *host);
-/* Create a socket that can accept connections from a 
- * IP address on the current machine if the current machine
- * has multiple IP addresses. */
+/* Create an IPV6 socket that can accept connections from 
+ * both IPV4 and IPV6 clients on the current machine. */
 
 int netAccept(int sd);
 /* Accept incoming connection from socket descriptor. */
 
-int netAcceptFrom(int sd, unsigned char subnet[4]);
+int netAcceptFrom(int acceptor, struct cidr *subnet);
 /* Wait for incoming connection from socket descriptor
  * from IP address in subnet.  Subnet is something
- * returned from netParseDottedQuad.  */
+ * returned from internetParseSubnetCidr. 
+ * Subnet may be NULL. */
 
 FILE *netFileFromSocket(int socket);
 /* Wrap a FILE around socket.  This should be fclose'd
@@ -109,10 +107,6 @@ boolean netPipeIsBroken();
 void  netClearPipeFlag();
 /* Clear broken pipe flag. */
 
-void netParseSubnet(char *in, unsigned char out[4]);
-/* Parse subnet, which is a prefix of a normal dotted quad form.
- * Out will contain 255's for the don't care bits. */
-
 struct netParsedUrl
 /* A parsed URL. */
    {
@@ -169,9 +163,9 @@ int netUrlHead(char *url, struct hash *hash);
  * lines with upper cased keywords for case-insensitive lookup, 
  * including hopefully CONTENT-TYPE: . */
 
-long long netUrlSizeByRangeResponse(char *url);
-/* Use byteRange as a work-around alternate method to get file size (content-length).  
- * Return negative number if can't get. */
+int netUrlFakeHeadByGet(char *url, struct hash *hash);
+/* Use GET with byteRange as an alternate method to HEAD. 
+ * Return status. */
 
 struct lineFile *netLineFileOpen(char *url);
 /* Return a lineFile attached to url.  This one
@@ -209,6 +203,12 @@ void netHttpGet(struct lineFile *lf, struct netParsedUrl *npu,
 int netOpenHttpExt(char *url, char *method, char *optionalHeader);
 /* Return a file handle that will read the url.  optionalHeader
  * may by NULL or may contain cookies and other info. */
+
+void setAuthorization(struct netParsedUrl npu, char *authHeader, struct dyString *dy);
+/* Set the specified authorization header with BASIC auth base64-encoded user and password */
+
+boolean checkNoProxy(char *host);
+/* See if host endsWith element on no_proxy list. */
 
 int netHttpConnect(char *url, char *method, char *protocol, char *agent, char *optionalHeader);
 /* Parse URL, connect to associated server on port, and send most of
@@ -267,5 +267,6 @@ boolean netGetFtpInfo(char *url, long long *retSize, time_t *retTime);
 
 boolean hasProtocol(char *urlOrPath);
 /* Return TRUE if it looks like it has http://, ftp:// etc. */
+
 #endif /* NET_H */
 

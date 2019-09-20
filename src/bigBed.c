@@ -152,7 +152,7 @@ if (!isEmpty(interval->rest))
 return fieldCount;
 }
 
-struct bbiInterval *bigBedCoverageIntervals(struct bbiFile *bbi,
+static struct bbiInterval *bigBedCoverageIntervals(struct bbiFile *bbi,
 	char *chrom, bits32 start, bits32 end, struct lm *lm)
 /* Return intervals where the val is the depth of coverage. */
 {
@@ -530,6 +530,24 @@ if (bbi)
     return as;
     }
 return NULL;
+}
+
+int bbExtraFieldIndex(struct bbiFile *bbi, char* fieldName)
+/* return the index of a given extra field */
+{
+if (fieldName==NULL)
+    return 0;
+struct asObject *as = bigBedAsOrDefault(bbi);
+if (as == NULL)
+    return 0;
+
+// search for field name, return index if found
+struct asColumn *col = as->columnList;
+int ix = 0;
+for (;col != NULL;col=col->next, ix+=1)
+    if (sameString(col->name, fieldName))
+        return max(ix-3, 0); // never return a negative value
+return 0;
 }
 
 bits64 bigBedItemCount(struct bbiFile *bbi)

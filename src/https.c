@@ -3,8 +3,6 @@
 /* Copyright (C) 2012 The Regents of the University of California 
  * See README in this or parent directory for licensing information. */
 
-#ifdef USE_SSL
-
 #include "openssl/ssl.h"
 #include "openssl/err.h"
 
@@ -52,6 +50,7 @@ struct netConnectHttpsParams
 pthread_t thread;
 char *hostName;
 int port;
+boolean noProxy;
 int sv[2]; /* the pair of socket descriptors */
 };
 
@@ -94,10 +93,14 @@ struct netConnectHttpsParams *params = threadParam;
 pthread_detach(params->thread);  // this thread will never join back with it's progenitor
 
 int fd=0;
+char *proxyUrl = getenv("https_proxy");
+if (params->noProxy)
+    proxyUrl = NULL;
+char *connectHost;
+int connectPort;
 
-char hostnameProto[256];
-
-BIO *sbio;
+BIO *fbio=NULL;  // file descriptor bio
+BIO *sbio=NULL;  // ssl bio
 SSL_CTX *ctx;
 SSL *ssl;
 
@@ -128,8 +131,79 @@ if (certFile || certPath)
 */
 
 
-sbio = BIO_new_ssl_connect(ctx);
 
+// Don't want any retries since we are non-blocking bio now
+// This is available on newer versions of openssl
+//SSL_set_mode(ssl, SSL_MODE_AUTO_RETRY);
+
+// Support for Http Proxy
+struct netParsedUrl pxy;
+if (proxyUrl)
+    {
+    netParseUrl(proxyUrl, &pxy);
+    if (!sameString(pxy.protocol, "http"))
+	{
+	char s[256];	
+	safef(s, sizeof s, "Unknown proxy protocol %s in %s. Should be http.", pxy.protocol, proxyUrl);
+	xerr(s);
+	goto cleanup;
+	}
+    connectHost = pxy.host;
+    connectPort = atoi(pxy.port);
+    }
+else
+    {
+    connectHost = params->hostName;
+    connectPort = params->port;
+    }
+fd = netConnect(connectHost,connectPort);
+if (fd == -1)
+    {
+    xerr("netConnect() failed");
+    goto cleanup;
+    }
+
+if (proxyUrl)
+    {
+    char *logProxy = getenv("log_proxy");
+    if (sameOk(logProxy,"on"))
+	verbose(1, "CONNECT %s:%d HTTP/1.0 via %s:%d\n", params->hostName, params->port, connectHost,connectPort);
+    struct dyString *dy = newDyString(512);
+    dyStringPrintf(dy, "CONNECT %s:%d HTTP/1.0\r\n", params->hostName, params->port);
+    setAuthorization(pxy, "Proxy-Authorization", dy);
+    dyStringAppend(dy, "\r\n");
+    mustWriteFd(fd, dy->string, dy->stringSize);
+    dyStringFree(&dy);
+    // verify response
+    char *newUrl = NULL;
+    boolean success = netSkipHttpHeaderLinesWithRedirect(fd, proxyUrl, &newUrl);
+    if (!success) 
+	{
+	xerr("proxy server response failed");
+	goto cleanup;
+	}
+    if (newUrl) /* no redirects */
+	{
+	xerr("proxy server response should not be a redirect");
+	goto cleanup;
+	}
+    }
+
+
+fbio=BIO_new_socket(fd,BIO_NOCLOSE);  
+// BIO_NOCLOSE because we handle closing fd ourselves.
+if (fbio == NULL)
+    {
+    xerr("BIO_new_socket() failed");
+    goto cleanup;
+    }
+sbio = BIO_new_ssl(ctx, 1);
+if (sbio == NULL) 
+    {
+    xerr("BIO_new_ssl() failed");
+    goto cleanup;
+    }
+sbio = BIO_push(sbio, fbio);
 BIO_get_ssl(sbio, &ssl);
 if(!ssl) 
     {
@@ -137,14 +211,6 @@ if(!ssl)
     goto cleanup;
     }
 
-
-
-/* Don't want any retries since we are non-blocking bio now */
-//SSL_set_mode(ssl, SSL_MODE_AUTO_RETRY);
-
-
-safef(hostnameProto,sizeof(hostnameProto),"%s:%d",params->hostName,params->port);
-BIO_set_conn_hostname(sbio, hostnameProto);
 
 /* 
 Server Name Indication (SNI)
@@ -154,20 +220,20 @@ This line will allow the ssl connection to send the hostname at tls negotiation 
 It tells the remote server which hostname the client is connecting to.
 The hostname must not be an IP address.
 */ 
-if (!internetIsDottedQuad(params->hostName))
+if (!isIpv4Address(params->hostName) && !isIpv6Address(params->hostName))
     SSL_set_tlsext_host_name(ssl,params->hostName);
 
 BIO_set_nbio(sbio, 1);     /* non-blocking mode */
 
 while (1) 
     {
-    if (BIO_do_connect(sbio) == 1) 
+    if (BIO_do_handshake(sbio) == 1) 
 	{
 	break;  /* Connected */
 	}
     if (! BIO_should_retry(sbio)) 
 	{
-	xerr("BIO_do_connect() failed");
+	xerr("BIO_do_handshake() failed");
 	char s[256];	
 	safef(s, sizeof s, "SSL error: %s", ERR_reason_error_string(ERR_get_error()));
 	xerr(s);
@@ -350,10 +416,11 @@ while (1)
 		int saveErrno = errno;
 		if ((bwtx == -1) && (saveErrno == EPIPE))
 		    { // if there was a EPIPE, accept and consume the SIGPIPE now.
-		    struct timespec zerotime = {0};
-		    if (sigtimedwait(&sigpipe_mask, 0, &zerotime) == -1) 
+		    int sigErr, sig;
+		    if ((sigErr = sigwait(&sigpipe_mask, &sig)) != 0) 
 			{
-			perror("sigtimedwait");
+			errno = sigErr;
+			perror("sigwait");
 			exit(1);
 			}
 		    }
@@ -381,13 +448,14 @@ while (1)
 
 cleanup:
 
-BIO_free_all(sbio);
+BIO_free_all(sbio);  // will free entire chain of bios
+close(fd);     // Needed because we use BIO_NOCLOSE above. Someday might want to re-use a connection.
 close(params->sv[1]);  /* we are done with it */
 
 return NULL;
 }
 
-int netConnectHttps(char *hostName, int port)
+int netConnectHttps(char *hostName, int port, boolean noProxy)
 /* Return socket for https connection with server or -1 if error. */
 {
 
@@ -399,6 +467,7 @@ struct netConnectHttpsParams *params;
 AllocVar(params);
 params->hostName = cloneString(hostName);
 params->port = port;
+params->noProxy = noProxy;
 
 socketpair(AF_UNIX, SOCK_STREAM, 0, params->sv);
 
@@ -419,17 +488,3 @@ return params->sv[0];
 
 }
 
-#else
-
-#include <stdarg.h>
-#include "common.h"
-#include "errAbort.h"
-
-int netConnectHttps(char *hostName, int port)
-/* Start https connection with server or die. */
-{
-errAbort("No openssl available in netConnectHttps for %s : %d", hostName, port);
-return -1;   /* will never get to here, make compiler happy */
-}
-
-#endif

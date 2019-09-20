@@ -14,11 +14,11 @@ struct dyString
     {
     struct dyString *next;	/* Next in list. */
     char *string;		/* Current buffer. */
-    int bufSize;		/* Size of buffer. */
-    int stringSize;		/* Size of string. */
+    long bufSize;		/* Size of buffer. */
+    long stringSize;		/* Size of string. */
     };
 
-struct dyString *newDyString(int initialBufSize);
+struct dyString *newDyString(long initialBufSize);
 /* Allocate dynamic string with initial buffer size.  (Pass zero for default) */
 
 #define dyStringNew newDyString
@@ -36,7 +36,7 @@ void freeDyStringList(struct dyString **pDs);
 void dyStringAppend(struct dyString *ds, char *string);
 /* Append zero terminated string to end of dyString. */
 
-void dyStringAppendN(struct dyString *ds, char *string, int stringSize);
+void dyStringAppendN(struct dyString *ds, char *string, long stringSize);
 /* Append string of given size to end of string. */
 
 char dyStringAppendC(struct dyString *ds, char c);
@@ -61,7 +61,7 @@ void dyStringPrintf(struct dyString *ds, char *format, ...)
 #ifdef __GNUC__
 __attribute__((format(printf, 2, 3)))
 #endif
-    ;
+;
 
 struct dyString *dyStringCreate(char *format, ...)
 /*  Create a dyString with a printf style initial content */
@@ -77,7 +77,7 @@ struct dyString * dyStringSub(char *orig, char *in, char *out);
 /* Make up a duplicate of orig with all occurences of in substituted
  * with out. */
 
-void dyStringBumpBufSize(struct dyString *ds, int size);
+void dyStringBumpBufSize(struct dyString *ds, long size);
 /* Force dyString buffer to be at least given size. */
 
 char *dyStringCannibalize(struct dyString **pDy);
@@ -91,12 +91,26 @@ char *dyStringCannibalize(struct dyString **pDy);
 #define dyStringLen(ds) ds->stringSize
 /* return raw string length. */
 
-void dyStringResize(struct dyString *ds, int newSize);
+#define dyStringIsEmpty(ds) (ds->stringSize == 0)
+/* Return TRUE if dyString is empty. */
+
+#define dyStringIsNotEmpty(ds) (ds->stringSize > 0)
+/* Return TRUE if dyString is not empty. */
+
+void dyStringResize(struct dyString *ds, long newSize);
 /* resize a string, if the string expands, blanks are appended */
 
 void dyStringQuoteString(struct dyString *dy, char quotChar, char *text);
 /* Append quotChar-quoted text (with any internal occurrences of quotChar
  * \-escaped) onto end of dy. */
+
+INLINE void dyStringAppendSep(struct dyString *dy, char *sep)
+/* If dy is not empty then append sep; otherwise leave it empty.  For building up lists without
+ * a separator at the end. */
+{
+if (dyStringIsNotEmpty(dy))
+    dyStringAppend(dy, sep);
+}
 
 #endif /* DYSTRING_H */
 

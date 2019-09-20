@@ -28,6 +28,8 @@ struct jsonWrite
      struct dyString *dy;	/* Most of this module is building json text in here */
      struct jwObjInfo objStack[128]; /* Make stack deep enough to handle nested objects and lists */
      int stackIx;		/* Current index in stack */
+     char sep;			/* Separator, defaults to ' ', but set to '\n' for human
+                                 * readability. */
      };
 
 struct jsonWrite *jsonWriteNew();
@@ -43,7 +45,8 @@ void jsonWriteEndLine(struct jsonWrite *jw);
 /* Write comma if in middle, and then newline regardless. */
 
 void jsonWriteString(struct jsonWrite *jw, char *var, char *string);
-/* Print out "var": "val".  If var is NULL, print val only.  If string is NULL, "var": null . */
+/* Print out "var": "val" -- or rather, jsonStringEscape(val).
+ * If var is NULL, print val only.  If string is NULL, "var": null . */
 
 void jsonWriteDateFromUnix(struct jsonWrite *jw, char *var, long long unixTimeVal);
 /* Add "var": YYYY-MM-DDT-HH:MM:SSZ given a Unix time stamp. Var may be NULL. */

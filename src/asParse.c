@@ -569,6 +569,16 @@ for (ac = list; ac != NULL; ac = ac->next, ix++)
 return -1;
 }
 
+int asColumnMustFindIx(struct asColumn *list, char *name)
+/* Return index of first element of asColumn list that matches name.
+ * errAbort if not found. */
+{
+int ix = asColumnFindIx(list, name);
+if (ix < 0)
+    errAbort("asColumnMustFindIx: cannot find column \"%s\" in list", name);
+return ix;
+}
+
 boolean asCompareObjs(char *name1, struct asObject *as1, char *name2, struct asObject *as2, int numColumnsToCheck,
  int *retNumColumnsSame, boolean abortOnDifference)
 /* Compare as-objects as1 and as2 making sure several important fields show they are the same name and type.
@@ -602,7 +612,8 @@ else
 	 col1 != NULL && col2 != NULL && checkCount < numColumnsToCheck; 
 	 col1 = col1->next, col2 = col2->next, ++checkCount)
 	{
-	if (!sameOk(col1->name, col2->name))
+        // allow reserved fields to become used
+	if (!(sameOk(col1->name, col2->name) || sameOk(col1->name, "reserved") || sameOk("reserved", col2->name)))
 	    {
 	    verbose(verboseLevel,"column #%d names do not match: %s=[%s]  %s=[%s]\n"
 		, checkCount+1, name1, col1->name, name2, col2->name);

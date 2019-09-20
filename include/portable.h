@@ -19,6 +19,9 @@ struct slName *listDirRegEx(char *dir, char *regEx, int flags);
  * the regular expression pattern in directory.
  * See REGCOMP(3) for flags (e.g. REG_ICASE)  */
 
+struct slName *pathsInDirAndSubdirs(char *dir, char *wildcard);
+/* Return list of all non-directory files in dir and it's
+ * subdirs.  Returns path to files including dir and subdir. */
 
 struct fileInfo 
 /* Info about a file. */
@@ -80,6 +83,11 @@ void sleep1000(int milli);
 long clock1();
 /* A 1 hz clock. */
 
+char *getTempDir(void);
+/* get temporary directory to use for programs.  This first checks TMPDIR environment
+ * variable, then /data/tmp, /scratch/tmp, /var/tmp, /tmp.  Return is static and
+ * only set of first call */
+
 char *rTempName(char *dir, char *base, char *suffix);
 /* Make a temp name that's almost certainly unique. */
 
@@ -89,8 +97,8 @@ char *rTempName(char *dir, char *base, char *suffix);
  * file runs from - this is necessary for portable code. */
 struct tempName
 	{
-	char forCgi[128];
-	char forHtml[128];
+	char forCgi[4096];
+	char forHtml[4096];
 	};
 
 void makeTempName(struct tempName *tn, char *base, char *suffix);
@@ -154,8 +162,21 @@ boolean maybeTouchFile(char *fileName);
 /* If file exists, set its access and mod times to now.  If it doesn't exist, create it.
  * Return FALSE if we have a problem doing so. */
 
+void touchFileFromFile(const char *oldFile, const char *newFile);
+/* Set access and mod time of newFile from oldFile. */
+
+boolean isDirectory(char *pathName);
+/* Return TRUE if pathName is a directory. */
+
 boolean isRegularFile(char *fileName);
 /* Return TRUE if fileName is a regular file. */
+
+char *mustReadSymlinkExt(char *path, struct stat *sb);
+/* Read symlink or abort. FreeMem the returned value. */
+
+char *mustReadSymlink(char *path);
+/* Read symlink or abort. Checks that path is a symlink. 
+FreeMem the returned value. */
 
 void makeSymLink(char *oldName, char *newName);
 /* Return a symbolic link from newName to oldName or die trying */

@@ -14,7 +14,6 @@
 // Newlines are fine in Javascript, e.g. in an embedded <script>.
 // However, unescaped \n is illegal in JSON and web browsers may reject it.
 // Web browser plugins can pretty-print JSON nicely.
-#define JW_SEP " "
 
 struct jsonWrite *jsonWriteNew()
 /* Return new empty jsonWrite struct. */
@@ -22,6 +21,7 @@ struct jsonWrite *jsonWriteNew()
 struct jsonWrite *jw;
 AllocVar(jw);
 jw->dy = dyStringNew(0);
+jw->sep = ' ';
 return jw;
 }
 
@@ -65,7 +65,10 @@ INLINE void jsonWriteMaybeComma(struct jsonWrite *jw)
 /* If this is not the first item added to an object or list, write a comma. */
 {
 if (jw->objStack[jw->stackIx].isNotEmpty)
-    dyStringAppend(jw->dy, ","JW_SEP);
+    {
+    dyStringAppendC(jw->dy, ',');
+    dyStringAppendC(jw->dy, jw->sep);
+    }
 else
     jw->objStack[jw->stackIx].isNotEmpty = TRUE;
 }
@@ -79,11 +82,18 @@ if (var != NULL)
 }
 
 void jsonWriteString(struct jsonWrite *jw, char *var, char *string)
-/* Print out "var": "val".  If var is NULL, print val only.  If string is NULL, "var": null . */
+/* Print out "var": "val" -- or rather, jsonStringEscape(val).
+ * If var is NULL, print val only.  If string is NULL, "var": null . */
 {
 jsonWriteTag(jw, var);
 if (string)
-    dyStringPrintf(jw->dy, "\"%s\"", string);
+    {
+    size_t encSize = jsonStringEscapeSize(string);
+    char *encoded = needMem(encSize);  /* needMem limit is 500,000,000 */
+    jsonStringEscapeBuf(string, encoded, encSize);
+    dyStringPrintf(jw->dy, "\"%s\"", encoded);
+    freeMem(encoded);
+    }
 else
     dyStringAppend(jw->dy, "null");
 }
@@ -113,7 +123,7 @@ void jsonWriteDouble(struct jsonWrite *jw, char *var, double val)
 {
 struct dyString *dy = jw->dy;
 jsonWriteTag(jw, var);
-dyStringPrintf(dy, "%lf", val);
+dyStringPrintf(dy, "%g", val);
 }
 
 void jsonWriteLink(struct jsonWrite *jw, char *var, char *objRoot, char *name)
@@ -139,7 +149,8 @@ void jsonWriteListStart(struct jsonWrite *jw, char *var)
 {
 struct dyString *dy = jw->dy;
 jsonWriteTag(jw, var);
-dyStringAppend(dy, "["JW_SEP);
+dyStringAppendC(dy, '[');
+dyStringAppendC(dy, jw->sep);
 jsonWritePushObjStack(jw, FALSE, FALSE);
 }
 
@@ -147,7 +158,8 @@ void jsonWriteListEnd(struct jsonWrite *jw)
 /* End an array in JSON */
 {
 struct dyString *dy = jw->dy;
-dyStringAppend(dy, "]"JW_SEP);
+dyStringAppendC(dy, ']');
+dyStringAppendC(dy, jw->sep);
 jsonWritePopObjStack(jw, FALSE);
 }
 
@@ -156,7 +168,8 @@ void jsonWriteObjectStart(struct jsonWrite *jw, char *var)
 {
 jsonWriteTag(jw, var);
 struct dyString *dy = jw->dy;
-dyStringAppend(dy, "{"JW_SEP);
+dyStringAppendC(dy, '{');
+dyStringAppendC(dy, jw->sep);
 jsonWritePushObjStack(jw, FALSE, TRUE);
 }
 
@@ -164,23 +177,22 @@ void jsonWriteObjectEnd(struct jsonWrite *jw)
 /* End object in JSON */
 {
 struct dyString *dy = jw->dy;
-dyStringAppend(dy, "}"JW_SEP);
+dyStringAppendC(dy, '}');
+dyStringAppendC(dy, jw->sep);
 jsonWritePopObjStack(jw, TRUE);
 }
 
 void jsonWriteStringf(struct jsonWrite *jw, char *var, char *format, ...)
 /* Write "var": "val" where val is jsonStringEscape'd formatted string. */
 {
-// Since we're using jsonStringEscape(), we need to use a temporary dyString
-// instead of jw->dy.
+// In order to use jsonStringEscape(), we need to use a temporary dyString
+// instead of jw->dy in the dyStringVaPrintf, and pass that to jsonWriteString.
 struct dyString *tmpDy = dyStringNew(0);
 va_list args;
 va_start(args, format);
 dyStringVaPrintf(tmpDy, format, args);
 va_end(args);
-char *escaped = jsonStringEscape(tmpDy->string);
-jsonWriteString(jw, var, escaped);
-freeMem(escaped);
+jsonWriteString(jw, var, tmpDy->string);
 dyStringFree(&tmpDy);
 }
 

@@ -32,6 +32,11 @@ static void udcSeekWrap(void *file, bits64 offset)
 udcSeek((struct udcFile *)file, offset);
 }
 
+static bits64 udcTellWrap(void *file)
+{
+return udcTell((struct udcFile *)file);
+}
+
 static void udcMustReadWrap(void *file, void *buf, size_t size)
 {
 udcMustRead((struct udcFile *)file, buf, size);
@@ -45,6 +50,11 @@ udcFileClose((struct udcFile **)pFile);
 static bits32 udcReadBits32Wrap(void *f, boolean isSwapped)
 {
 return udcReadBits32((struct udcFile *)f, isSwapped);
+}
+
+static bits64 udcReadBits64Wrap(void *f, boolean isSwapped)
+{
+return udcReadBits64((struct udcFile *)f, isSwapped);
 }
 
 static boolean udcFastReadStringWrap(void *f, char buf[256])
@@ -63,6 +73,11 @@ static void seekWrap(void *file, bits64 offset)
 fseek((FILE *)file, offset, SEEK_SET);
 }
 
+static bits64 tellWrap(void *file)
+{
+return ftell((FILE *)file);
+}
+
 static void mustReadWrap(void *file, void *buf, size_t size)
 {
 mustRead((FILE *)file, buf, size);
@@ -76,6 +91,11 @@ carefulClose((FILE **)pFile);
 static bits32 readBits32Wrap(void *f, boolean isSwapped)
 {
 return readBits32((FILE *)f, isSwapped);
+}
+
+static bits64 readBits64Wrap(void *f, boolean isSwapped)
+{
+return readBits64((FILE *)f, isSwapped);
 }
 
 static boolean fastReadStringWrap(void *f, char buf[256])
@@ -92,7 +112,9 @@ if (useUdc)
     {
     tbf->ourSeekCur = udcSeekCurWrap;
     tbf->ourSeek = udcSeekWrap;
+    tbf->ourTell = udcTellWrap;
     tbf->ourReadBits32 = udcReadBits32Wrap;
+    tbf->ourReadBits64 = udcReadBits64Wrap;
     tbf->ourFastReadString = udcFastReadStringWrap;
     tbf->ourClose = udcFileCloseWrap;
     tbf->ourMustRead = udcMustReadWrap;
@@ -101,7 +123,9 @@ else
     {
     tbf->ourSeekCur = seekCurWrap;
     tbf->ourSeek = seekWrap;
+    tbf->ourTell = tellWrap;
     tbf->ourReadBits32 = readBits32Wrap;
+    tbf->ourReadBits64 = readBits64Wrap;
     tbf->ourFastReadString = fastReadStringWrap;
     tbf->ourClose = fileCloseWrap;
     tbf->ourMustRead = mustReadWrap;
@@ -311,15 +335,19 @@ writeOne(f, twoBit->reserved);
 mustWrite(f, twoBit->data, packedSize(twoBit->size));
 }
 
-void twoBitWriteHeader(struct twoBit *twoBitList, FILE *f)
+void twoBitWriteHeaderExt(struct twoBit *twoBitList, FILE *f, boolean useLong)
 /* Write out header portion of twoBit file, including initial
- * index */
+ * index. If useLong is True, use 64 bit quantities for the index offsets to support >4Gb assemblies */
 {
 bits32 sig = twoBitSig;
 bits32 version = 0;
+if (useLong)
+    version = 1;
+
 bits32 seqCount = slCount(twoBitList);
 bits32 reserved = 0;
 bits32 offset = 0;
+bits64 longOffset = 0;
 struct twoBit *twoBit;
 long long counter = 0; /* check for 32 bit overflow */
 
@@ -332,13 +360,16 @@ writeOne(f, reserved);
 /* Figure out location of first byte past index.
  * Each index entry contains 4 bytes of offset information
  * and the name of the sequence, which is variable length. */
-offset = sizeof(sig) + sizeof(version) + sizeof(seqCount) + sizeof(reserved);
+longOffset = offset = sizeof(sig) + sizeof(version) + sizeof(seqCount) + sizeof(reserved);
 for (twoBit = twoBitList; twoBit != NULL; twoBit = twoBit->next)
     {
     int nameLen = strlen(twoBit->name);
     if (nameLen > 255)
         errAbort("name %s too long", twoBit->name);
-    offset += nameLen + 1 + sizeof(bits32);
+    if (useLong)
+        longOffset += nameLen + 1 + sizeof(bits64);
+    else
+        offset += nameLen + 1 + sizeof(bits32);
     }
 
 /* Write out index. */
@@ -346,15 +377,30 @@ for (twoBit = twoBitList; twoBit != NULL; twoBit = twoBit->next)
     {
     int size = twoBitSizeInFile(twoBit);
     writeString(f, twoBit->name);
-    writeOne(f, offset);
-    offset += size;
+    if (useLong)
+        {
+        writeOne(f, longOffset);
+        longOffset += size;
+        }
+    else
+        {
+        writeOne(f, offset);
+        offset += size;
+        }
     counter += (long long)size;
-    if (counter > UINT_MAX )
+    if (!useLong && (counter > UINT_MAX ))
         errAbort("Error in faToTwoBit, index overflow at %s. The 2bit format "
                 "does not support indexes larger than %dGb, \n"
-                "please split up into smaller files.\n", 
+                "please split up into smaller files, or use -long option.\n", 
                 twoBit->name, UINT_MAX/1000000000);
     }
+}
+
+void twoBitWriteHeader(struct twoBit *twoBitList, FILE *f)
+/* Write out header portion of twoBit file, including initial
+ * index */
+{
+twoBitWriteHeaderExt(twoBitList, f, FALSE);
 }
 
 void twoBitClose(struct twoBitFile **pTbf)
@@ -363,6 +409,7 @@ void twoBitClose(struct twoBitFile **pTbf)
 struct twoBitFile *tbf = *pTbf;
 if (tbf != NULL)
     {
+    twoBitFree(&tbf->seqCache);
     freez(&tbf->fileName);
     (*tbf->ourClose)(&tbf->f);
     hashFree(&tbf->hash);
@@ -421,9 +468,9 @@ if (!twoBitSigRead(tbf, &isSwapped))
 tbf->isSwapped = isSwapped;
 tbf->fileName = cloneString(fileName);
 tbf->version = (*tbf->ourReadBits32)(tbf->f, isSwapped);
-if (tbf->version != 0)
+if ((tbf->version != 0) && (tbf->version != 1))
     {
-    errAbort("Can only handle version 0 of this file. This is version %d",
+    errAbort("Can only handle version 0 or version 1 of this file. This is version %d",
     	(int)tbf->version);
     }
 tbf->seqCount = (*tbf->ourReadBits32)(tbf->f, isSwapped);
@@ -454,7 +501,10 @@ for (i=0; i<tbf->seqCount; ++i)
     if (!(*tbf->ourFastReadString)(f, name))
         errAbort("%s is truncated", fileName);
     lmAllocVar(hash->lm, index);
-    index->offset = (*tbf->ourReadBits32)(f, isSwapped);
+    if (tbf->version == 1)
+        index->offset = (*tbf->ourReadBits64)(f, isSwapped);
+    else
+        index->offset = (*tbf->ourReadBits32)(f, isSwapped);
     hashAddSaveName(hash, name, index, &index->name);
     slAddHead(&tbf->indexList, index);
     }
@@ -554,10 +604,10 @@ else
     }
 }
 
-struct twoBit *twoBitOneFromFile(struct twoBitFile *tbf, char *name)
-/* Get single sequence as two bit. */
+static struct twoBit *readTwoBitSeqHeader(struct twoBitFile *tbf, char *name)
+/* read a sequence header, nBlocks and maskBlocks from a twoBit file,
+ * leaving file pointer at data block */
 {
-bits32 packByteCount;
 boolean isSwapped = tbf->isSwapped;
 struct twoBit *twoBit;
 AllocVar(twoBit);
@@ -581,6 +631,16 @@ readBlockCoords(tbf, isSwapped, &(twoBit->maskBlockCount),
 /* Reserved word. */
 twoBit->reserved = (*tbf->ourReadBits32)(f, isSwapped);
 
+return twoBit;
+}
+
+struct twoBit *twoBitOneFromFile(struct twoBitFile *tbf, char *name)
+/* Get single sequence as two bit. */
+{
+struct twoBit *twoBit = readTwoBitSeqHeader(tbf, name);
+bits32 packByteCount;
+void *f = tbf->f;
+
 /* Read in data. */
 packByteCount = packedSize(twoBit->size);
 twoBit->data = needLargeMem(packByteCount);
@@ -589,10 +649,9 @@ twoBit->data = needLargeMem(packByteCount);
 return twoBit;
 }
 
-struct twoBit *twoBitFromFile(char *fileName)
+struct twoBit *twoBitFromOpenFile(struct twoBitFile *tbf)
 /* Get twoBit list of all sequences in twoBit file. */
 {
-struct twoBitFile *tbf = twoBitOpen(fileName);
 struct twoBitIndex *index;
 struct twoBit *twoBitList = NULL;
 
@@ -606,6 +665,15 @@ twoBitClose(&tbf);
 slReverse(&twoBitList);
 return twoBitList;
 }
+
+struct twoBit *twoBitFromFile(char *fileName)
+/* Get twoBit list of all sequences in already open twoBit file. */
+{
+struct twoBitFile *tbf = twoBitOpen(fileName);
+
+return twoBitFromOpenFile(tbf);
+}
+
 
 void twoBitFree(struct twoBit **pTwoBit)
 /* Free up a two bit structure. */
@@ -635,6 +703,24 @@ for (el = *pList; el != NULL; el = next)
 *pList = NULL;
 }
 
+static struct twoBit *getTwoBitSeqHeader(struct twoBitFile *tbf, char *name)
+/* get the sequence header information using the cache.  Position file
+ * right at data. */
+{
+if ((tbf->seqCache != NULL) && (sameString(tbf->seqCache->name, name)))
+    {
+    // use cached
+    (*tbf->ourSeek)(tbf->f, tbf->dataOffsetCache);
+    }
+else
+    {
+    // fetch new and cache
+    twoBitFree(&tbf->seqCache);
+    tbf->seqCache = readTwoBitSeqHeader(tbf, name);
+    tbf->dataOffsetCache = (*tbf->ourTell)(tbf->f);
+    }
+return tbf->seqCache;
+}
 
 struct dnaSeq *twoBitReadSeqFragExt(struct twoBitFile *tbf, char *name,
 	int fragStart, int fragEnd, boolean doMask, int *retFullSize)
@@ -644,11 +730,6 @@ struct dnaSeq *twoBitReadSeqFragExt(struct twoBitFile *tbf, char *name,
  * if doMask is true. */
 {
 struct dnaSeq *seq;
-bits32 seqSize;
-bits32 nBlockCount, maskBlockCount;
-bits32 *nStarts = NULL, *nSizes = NULL;
-bits32 *maskStarts = NULL, *maskSizes = NULL;
-boolean isSwapped = tbf->isSwapped;
 void *f = tbf->f;
 int i;
 int packByteCount, packedStart, packedEnd, remainder, midStart, midEnd;
@@ -656,32 +737,22 @@ int outSize;
 UBYTE *packed, *packedAlloc;
 DNA *dna;
 
-/* Find offset in index and seek to it */
+/* get sequence header information, which is cached */
 dnaUtilOpen();
-twoBitSeekTo(tbf, name);
+struct twoBit *twoBit = getTwoBitSeqHeader(tbf, name);
 
-/* Read in seqSize. */
-seqSize = (*tbf->ourReadBits32)(f, isSwapped);
+/* validate range. */
 if (fragEnd == 0)
-    fragEnd = seqSize;
-if (fragEnd > seqSize)
-    errAbort("twoBitReadSeqFrag in %s end (%d) >= seqSize (%d)", name, fragEnd, seqSize);
+    fragEnd = twoBit->size;
+if (fragEnd > twoBit->size)
+    errAbort("twoBitReadSeqFrag in %s end (%d) >= seqSize (%d)", name, fragEnd, twoBit->size);
 outSize = fragEnd - fragStart;
 if (outSize < 1)
     errAbort("twoBitReadSeqFrag in %s start (%d) >= end (%d)", name, fragStart, fragEnd);
 
-/* Read in blocks of N. */
-readBlockCoords(tbf, isSwapped, &nBlockCount, &nStarts, &nSizes);
-
-/* Read in masked blocks. */
-readBlockCoords(tbf, isSwapped, &maskBlockCount, &maskStarts, &maskSizes);
-
-/* Skip over reserved word. */
-(*tbf->ourReadBits32)(f, isSwapped);
-
 /* Allocate dnaSeq, and fill in zero tag at end of sequence. */
 AllocVar(seq);
-if (outSize == seqSize)
+if (outSize == twoBit->size)
     seq->name = cloneString(name);
 else
     {
@@ -761,13 +832,13 @@ else
     }
 freez(&packedAlloc);
 
-if (nBlockCount > 0)
+if (twoBit->nBlockCount > 0)
     {
-    int startIx = findGreatestLowerBound(nBlockCount, nStarts, fragStart);
-    for (i=startIx; i<nBlockCount; ++i)
+    int startIx = findGreatestLowerBound(twoBit->nBlockCount, twoBit->nStarts, fragStart);
+    for (i=startIx; i<twoBit->nBlockCount; ++i)
         {
-	int s = nStarts[i];
-	int e = s + nSizes[i];
+	int s = twoBit->nStarts[i];
+	int e = s + twoBit->nSizes[i];
 	if (s >= fragEnd)
 	    break;
 	if (s < fragStart)
@@ -782,14 +853,14 @@ if (nBlockCount > 0)
 if (doMask)
     {
     toUpperN(seq->dna, seq->size);
-    if (maskBlockCount > 0)
+    if (twoBit->maskBlockCount > 0)
 	{
-	int startIx = findGreatestLowerBound(maskBlockCount, maskStarts, 
+	int startIx = findGreatestLowerBound(twoBit->maskBlockCount, twoBit->maskStarts,
 		fragStart);
-	for (i=startIx; i<maskBlockCount; ++i)
+	for (i=startIx; i<twoBit->maskBlockCount; ++i)
 	    {
-	    int s = maskStarts[i];
-	    int e = s + maskSizes[i];
+	    int s = twoBit->maskStarts[i];
+	    int e = s + twoBit->maskSizes[i];
 	    if (s >= fragEnd)
 		break;
 	    if (s < fragStart)
@@ -801,12 +872,8 @@ if (doMask)
 	    }
 	}
     }
-freez(&nStarts);
-freez(&nSizes);
-freez(&maskStarts);
-freez(&maskSizes);
 if (retFullSize != NULL)
-    *retFullSize = seqSize;
+    *retFullSize = twoBit->size;
 return seq;
 }
 
@@ -1131,6 +1198,20 @@ if (spec != NULL)
     }
 }
 
+void twoBitOutMaskBeds(struct twoBitFile *tbf, char *seqName, FILE *outF)
+/* output a series of bed3's that enumerate the number of masked bases in a sequence*/
+{
+struct twoBit *header = readTwoBitSeqHeader(tbf, seqName);
+
+int ii;
+for (ii = 0; ii < header->maskBlockCount; ++ii)
+    {
+    fprintf(outF, "%s\t%d\t%d\n", seqName, header->maskStarts[ii], header->maskStarts[ii] + header->maskSizes[ii]);
+    }
+
+twoBitFree(&header);
+}
+
 void twoBitOutNBeds(struct twoBitFile *tbf, char *seqName, FILE *outF)
 /* output a series of bed3's that enumerate the number of N's in a sequence*/
 {
@@ -1232,4 +1313,19 @@ boolean twoBitIsSequence(struct twoBitFile *tbf, char *chromName)
 /* Return TRUE if chromName is in 2bit file. */
 {
 return (hashFindVal(tbf->hash, chromName) != NULL);
+}
+
+struct hash *twoBitChromHash(char *fileName)
+/* Build a hash of chrom names with their sizes. */
+{
+struct twoBitFile *tbf = twoBitOpen(fileName);
+struct twoBitIndex *index;
+struct hash *hash = hashNew(digitsBaseTwo(tbf->seqCount));
+for (index = tbf->indexList; index != NULL; index = index->next)
+    {
+    hashAddInt(hash, index->name, twoBitSeqSize(tbf, index->name));
+    }
+
+twoBitClose(&tbf);
+return hash;
 }

@@ -347,29 +347,78 @@ for (i=0; i<hash->size; ++i)
 return sum;
 }
 
-struct hash *newHashExt(int powerOfTwoSize, boolean useLocalMem)
-/* Returns new hash table. Uses local memory optionally. */
+void hashIntReset(struct hash *hash)
+/* Reset all values in hash of ints to 0.  Reset element count to 0. */
 {
-struct hash *hash = needMem(sizeof(*hash));
-int memBlockPower = 16;
+memset(hash->table, 0, hash->size * sizeof hash->table[0]);
+hash->elCount = 0;
+}
+
+static int adjustPowerOfTwoSize(int powerOfTwoSize)
+/* If powerOfTwoSize is 0, return a reasonable default to use instead.  If powerOfTwoSize
+ * is out of range, errAbort.  Otherwise return powerOfTwoSize. */
+{
 if (powerOfTwoSize == 0)
     powerOfTwoSize = 12;
-assert(powerOfTwoSize <= hashMaxSize && powerOfTwoSize > 0);
+if (powerOfTwoSize > hashMaxSize || powerOfTwoSize < 0)
+    errAbort("hash powerOfTwoSize must be >= 0 and <= %d, but %d was passed in.",
+             hashMaxSize, powerOfTwoSize);
+return powerOfTwoSize;
+}
+
+struct hash *newHashLm(int powerOfTwoSize, struct lm *lm)
+/* Returns new hash table using the given lm.  Recommended lm block size is 256B to 64kB,
+ * depending on powerOfTwoSize. */
+{
+struct hash *hash = lm ? lmAlloc(lm, sizeof(*hash)) : needMem(sizeof(*hash));
+powerOfTwoSize = adjustPowerOfTwoSize(powerOfTwoSize);
 hash->powerOfTwoSize = powerOfTwoSize;
 hash->size = (1<<powerOfTwoSize);
-/* Make size of memory block for allocator vary between
- * 256 bytes and 64k depending on size of table. */
-if (powerOfTwoSize < 8)
-    memBlockPower = 8;
-else if (powerOfTwoSize < 16)
-    memBlockPower = powerOfTwoSize;
-if (useLocalMem) 
-    hash->lm = lmInit(1<<memBlockPower);
+hash->lm = lm;
 hash->mask = hash->size-1;
-AllocArray(hash->table, hash->size);
+if (lm)
+    lmAllocArray(hash->lm, hash->table, hash->size);
+else
+    AllocArray(hash->table, hash->size);
 hash->autoExpand = TRUE;
 hash->expansionFactor = defaultExpansionFactor;   /* Expand when elCount > size*expansionFactor */
 return hash;
+}
+
+struct hash *newHashExt(int powerOfTwoSize, boolean useLocalMem)
+/* Returns new hash table. Uses local memory optionally. */
+{
+struct hash *hash = NULL;
+if (useLocalMem)
+    {
+    int memBlockPower = 16;
+    powerOfTwoSize = adjustPowerOfTwoSize(powerOfTwoSize);
+    /* Make size of memory block for allocator vary between
+     * 256 bytes and 64k depending on size of table. */
+    if (powerOfTwoSize < 8)
+        memBlockPower = 8;
+    else if (powerOfTwoSize < 16)
+        memBlockPower = powerOfTwoSize;
+    struct lm *ownLm = lmInit(1<<memBlockPower);
+    hash = newHashLm(powerOfTwoSize, ownLm);
+    hash->ownLm = TRUE;
+    }
+else
+    hash = newHashLm(powerOfTwoSize, NULL);
+return hash;
+}
+
+void hashReverseAllBucketLists(struct hash *hash)
+/* Reverse all hash bucket list.  You might do this to
+ * get them back in the same order things were added to the hash */
+{
+int i;
+for (i=0; i<hash->size; ++i)
+    {
+    struct hashEl *hel = hash->table[i];
+    if (hel != NULL && hel->next != NULL)	    
+	slReverse(&hash->table[i]);
+    }
 }
 
 void hashResize(struct hash *hash, int powerOfTwoSize)
@@ -378,10 +427,9 @@ void hashResize(struct hash *hash, int powerOfTwoSize)
 int oldHashSize = hash->size;
 struct hashEl **oldTable = hash->table;
 
-if (powerOfTwoSize == 0)
-    powerOfTwoSize = 12;
 if (powerOfTwoSize > hashMaxSize)
     powerOfTwoSize =  hashMaxSize;
+powerOfTwoSize = adjustPowerOfTwoSize(powerOfTwoSize);
 if (hash->powerOfTwoSize == powerOfTwoSize)
     return;
 
@@ -390,7 +438,10 @@ hash->powerOfTwoSize = powerOfTwoSize;
 hash->size = (1<<powerOfTwoSize);
 hash->mask = hash->size-1;
 
-AllocArray(hash->table, hash->size);
+if (hash->lm)
+    lmAllocArray(hash->lm, hash->table, hash->size);
+else
+    AllocArray(hash->table, hash->size);
 
 int i;
 struct hashEl *hel, *next;
@@ -405,13 +456,10 @@ for (i=0; i<oldHashSize; ++i)
 	}
     }
 /* restore original list order */
-for (i=0; i<hash->size; ++i)
-    {
-    struct hashEl *hel = hash->table[i];
-    if (hel != NULL && hel->next != NULL)	    
-	slReverse(&hash->table[i]);
-    }
-freeMem(oldTable);
+hashReverseAllBucketLists(hash);
+
+if (!hash->lm)
+    freeMem(oldTable);
 hash->numResizes++;
 }
 
@@ -607,7 +655,11 @@ struct hash *hash = *pHash;
 if (hash == NULL)
     return;
 if (hash->lm)
-    lmCleanup(&hash->lm);
+    {
+    if (hash->ownLm)
+        lmCleanup(&hash->lm);
+    *pHash = NULL;
+    }
 else
     {
     int i;
@@ -620,9 +672,9 @@ else
 	    freeHashEl(hel);
 	    }
 	}
+    freeMem(hash->table);
+    freez(pHash);
     }
-freeMem(hash->table);
-freez(pHash);
 }
 
 
@@ -760,4 +812,25 @@ for (kv = keyVals; kv != NULL; kv = kv->next)
     hashAdd(nameToVal, kv->name, kv->val);
 return nameToVal;
 }
+
+struct hash *hashFromNameArray(char **nameArray, int nameCount)
+/* Create a NULL valued hash on all names in array */
+{
+struct hash *hash = hashNew(0);
+int i;
+for (i=0; i<nameCount; ++i)
+    hashAdd(hash, nameArray[i], NULL);
+return hash;
+}
+
+struct hash *hashFromNameValArray(char *nameVal[][2], int nameValCount)
+/* Make up a hash from nameVal array */
+{
+struct hash *hash = newHash(0);
+int i;
+for (i=0; i<nameValCount; ++i)
+    hashAdd(hash, nameVal[i][0], nameVal[i][1]);
+return hash;
+}
+
 

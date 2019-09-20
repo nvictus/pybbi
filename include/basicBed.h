@@ -36,11 +36,12 @@ struct bed
     int expCount;	/* Experiment count */
     int *expIds;		/* Comma separated list of Experiment ids */
     float *expScores;	/* Comma separated list of Experiment scores. */
+    char *label;        /* Label to use on element if bigBed. */
     };
 
 #define bedKnownFields 15	/* Maximum known fields in bed */
 
-#define BB_MAX_CHROM_STRING 32  /* Maximum string length for chromosome length */
+#define BB_MAX_CHROM_STRING 255  /* Maximum string length for chromosome length */
 
 struct bed3
 /* Browser extensible data - first three fields */
@@ -268,6 +269,14 @@ struct hash *readBedToBinKeeper(char *sizeFileName, char *bedFileName, int wordC
 int bedParseRgb(char *itemRgb);
 /*	parse a string: "r,g,b" into three unsigned char values
 	returned as 24 bit number, or -1 for failure */
+
+int bedParseColor(char *colorSpec);
+/* Parse an HTML color string, a  string of 3 comma-sep unsigned color values 0-255, 
+ * or a 6-digit hex string  preceded by #. 
+ * O/w return unsigned integer value.  Return -1 on error */
+
+void bedOutputRgb(FILE *f, unsigned int color);
+/*      Output a string: "r,g,b" for 24 bit number */
 
 long long bedTotalSize(struct bed *bedList);
 /* Add together sizes of all beds in list. */

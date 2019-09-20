@@ -1086,6 +1086,7 @@ void pslRc(struct psl *psl)
 unsigned tSize = psl->tSize, qSize = psl->qSize;
 unsigned blockCount = psl->blockCount, i;
 unsigned *tStarts = psl->tStarts, *qStarts = psl->qStarts, *blockSizes = psl->blockSizes;
+int mult = pslIsProtein(psl) ? 3 : 1;
 
 /* swap strand, forcing target to have an explict strand */
 psl->strand[0] = (psl->strand[0] != '-') ? '-' : '+';
@@ -1094,7 +1095,7 @@ psl->strand[2] = 0;
 
 for (i=0; i<blockCount; ++i)
     {
-    tStarts[i] = tSize - (tStarts[i] + blockSizes[i]);
+    tStarts[i] = tSize - (tStarts[i] + mult * blockSizes[i]);
     qStarts[i] = qSize - (qStarts[i] + blockSizes[i]);
     }
 reverseUnsigned(tStarts, blockCount);
@@ -1216,7 +1217,7 @@ for (i=0; i<psl->blockCount; ++i)
 fprintf(f, "</PRE>");
 }
 
-static void pslRecalcBounds(struct psl *psl)
+void pslRecalcBounds(struct psl *psl)
 /* Calculate qStart/qEnd tStart/tEnd at top level to be consistent
  * with blocks. */
 {
@@ -1540,9 +1541,13 @@ if (baseInsert != pBaseInsert)
              pName, pCLabel, pBaseInsert, baseInsert);
 }
 
-int pslCheck(char *pslDesc, FILE* out, struct psl* psl)
-/* Validate a PSL for consistency.  pslDesc is printed the error messages
- * to file out (open /dev/null to discard). Return count of errors. */
+int pslCheck2(unsigned opts, char *pslDesc, FILE* out, struct psl* psl)
+/* Validate a PSL for consistency.  pslDesc is printed the error messages to
+ * file out (open /dev/null to discard). Return count of errors.  Option
+ * PSL_CHECK_IGNORE_INSERT_CNTS doesn't validate problems insert counts fields
+ * in each PSL.  Useful because protein PSL doesn't seen to compute these in a
+ * consistent way.
+ */
 {
 static char* VALID_STRANDS[] = {
     "+", "-", "++", "+-", "-+", "--", NULL
@@ -1563,14 +1568,23 @@ if (VALID_STRANDS[i] == NULL)
 /* check query */
 chkRanges(pslDesc, out, psl, psl->qName, "query", 'q', pslQStrand(psl), psl->qSize, psl->qStart, psl->qEnd,
           psl->qStarts, 1, &errCount);
-chkInsertCounts(pslDesc, out, psl, psl->qName, 'q', psl->qStarts, psl->qNumInsert, psl->qBaseInsert, &errCount);
+if ((opts & PSL_CHECK_IGNORE_INSERT_CNTS) == 0)
+    chkInsertCounts(pslDesc, out, psl, psl->qName, 'q', psl->qStarts, psl->qNumInsert, psl->qBaseInsert, &errCount);
 
 /* check target */
 chkRanges(pslDesc, out, psl, psl->tName, "target", 't', pslTStrand(psl), psl->tSize, psl->tStart, psl->tEnd,
           psl->tStarts, tBlockSizeMult, &errCount);
-chkInsertCounts(pslDesc, out, psl, psl->tName, 't', psl->tStarts, psl->tNumInsert, psl->tBaseInsert, &errCount);
+if ((opts & PSL_CHECK_IGNORE_INSERT_CNTS) == 0)
+    chkInsertCounts(pslDesc, out, psl, psl->tName, 't', psl->tStarts, psl->tNumInsert, psl->tBaseInsert, &errCount);
 
 return errCount;
+}
+
+int pslCheck(char *pslDesc, FILE* out, struct psl* psl)
+/* Validate a PSL for consistency.  pslDesc is printed the error messages
+ * to file out (open /dev/null to discard). Return count of errors. */
+{
+return pslCheck2(0, pslDesc, out, psl);
 }
 
 struct hash *readPslToBinKeeper(char *sizeFileName, char *pslFileName)
@@ -1937,13 +1951,12 @@ if (cigar == NULL)
     }
 else
     {
-    char cigarSpec[strlen(cigar+1)];  // copy since parsing is destructive
-    strcpy(cigarSpec, cigar);
+    if (strand[0] == '-' && strand[1] == '-')
+        errAbort("GFF3 spec is vague about Gap when both strands are '-'; not implemented yet.");
+    char cigarSpec[strlen(cigar)+1];  // copy since parsing is destructive
+    safecpy(cigarSpec, sizeof cigarSpec, cigar);
     char *cigarNext = cigarSpec;
-    if (strand[1] == '-')
-	for(; *cigarNext; cigarNext++)
-	    ;
-    while(getNextCigarOp(cigarSpec, (strand[1] == '-'), &cigarNext, &op, &size))
+    while(getNextCigarOp(cigarSpec, FALSE, &cigarNext, &op, &size))
 	{
 	switch (op)
 	    {
@@ -2055,4 +2068,64 @@ for (iBlk = 0; iBlk < psl->blockCount; iBlk++)
     pslCp->blockCount++;
     }
 return pslCp;
+}
+
+int cmpChrom(char *a, char *b)
+/* Compare two chromosomes. */
+{
+return cmpStringsWithEmbeddedNumbers(a, b);
+}
+
+
+int pslCmpTargetScore(const void *va, const void *vb)
+/* Compare to sort based on target then score. */
+{
+const struct psl *a = *((struct psl **)va);
+const struct psl *b = *((struct psl **)vb);
+int diff = cmpChrom(a->tName, b->tName);
+if (diff == 0)
+    diff = pslScore(b) - pslScore(a);
+return diff;
+}
+
+int pslCmpTargetStart(const void *va, const void *vb)
+/* Compare to sort based on target start. */
+{
+const struct psl *a = *((struct psl **)va);
+const struct psl *b = *((struct psl **)vb);
+int diff = cmpChrom(a->tName, b->tName);
+if (diff == 0)
+    diff = a->tStart - b->tStart;
+return diff;
+}
+
+char *pslSortList[] = {"query,score", "query,start", "chrom,score", "chrom,start", "score"};
+
+void pslSortListByVar(struct psl **pslList, char *sort)
+/* Sort a list of psls using the method definied in the sort string. */
+{
+if (sameString(sort, "query,start"))
+    {
+    slSort(pslList, pslCmpQuery);
+    }
+else if (sameString(sort, "query,score"))
+    {
+    slSort(pslList, pslCmpQueryScore);
+    }
+else if (sameString(sort, "score"))
+    {
+    slSort(pslList, pslCmpScore);
+    }
+else if (sameString(sort, "chrom,start"))
+    {
+    slSort(pslList, pslCmpTargetStart);
+    }
+else if (sameString(sort, "chrom,score"))
+    {
+    slSort(pslList, pslCmpTargetScore);
+    }
+else
+    {
+    slSort(pslList, pslCmpQueryScore);
+    }
 }

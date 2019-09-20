@@ -6,78 +6,50 @@
 #include "common.h"
 #include "portable.h"
 #include "bamFile.h"
-#ifdef USE_BAM
 #include "htmshell.h"
+#include "cram/cram_samtools.h"
+#include "cram/sam_header.h"
+#include "cram/cram_structs.h"
+#include "htslib/cram.h"
 #include "udc.h"
+#include "psl.h"
 
-#ifdef KNETFILE_HOOKS
 // If KNETFILE_HOOKS is used (as recommended!), then we can simply call bam_index_load
 // without worrying about the samtools lib creating local cache files in cgi-bin:
 
-#ifdef USE_HTS
-static bam_index_t *bamOpenIdx(samfile_t *sam, char *fileOrUrl)
+static bam_index_t *bamOpenIndexGivenUrl(samfile_t *sam, char *fileOrUrl, char *baiFileOrUrl)
 /* If fileOrUrl has a valid accompanying .bai file, parse and return the index;
- * otherwise return NULL. */
+ * otherwise return NULL. baiFileOrUrl can be NULL. 
+ * The difference to bamOpenIndex is that the URL/filename of the bai file can be specified. */
 {
 if (sam->format.format == cram) 
     return sam_index_load(sam, fileOrUrl);
 
 // assume that index is a .bai file 
 char indexName[4096];
-safef(indexName, sizeof indexName, "%s.bai", fileOrUrl);
-return sam_index_load2(sam, fileOrUrl, indexName);
-}
-#else
-static bam_index_t *bamOpenIdx(char *fileOrUrl)
-/* If fileOrUrl has a valid accompanying .bai file, parse and return the index;
- * otherwise return NULL. */
-{
-bam_index_t *idx = bam_index_load(fileOrUrl);
-return idx;
-}
-#endif
-
-#else// no KNETFILE_HOOKS
-// Oh well.  The unmodified samtools lib downloads .bai files into the current
-// working directory, which is cgi-bin -- not good.  So we need to temporarily
-// change to a trash directory, let samtools download there, then pop back to
-// cgi-bin.
-
-static char *getSamDir()
-/* Return the name of a trash dir for samtools to run in (it creates files in current dir)
- * and make sure the directory exists. */
-{
-static char *samDir = NULL;
-char *dirName = "samtools";
-if (samDir == NULL)
+bam_index_t *ret = NULL;
+if (baiFileOrUrl==NULL)
     {
-    mkdirTrashDirectory(dirName);
-    size_t len = strlen(trashDir()) + 1 + strlen(dirName) + 1;
-    samDir = needMem(len);
-    safef(samDir, len, "%s/%s", trashDir(), dirName);
+    // first try tacking .bai on the end of the bam file name
+    safef(indexName, sizeof indexName, "%s.bai", fileOrUrl);
+    if ((ret =  sam_index_load2(sam, fileOrUrl, indexName)) == NULL)
+        {
+        // since the open didn't work, try replacing suffix (if any) with .bai
+        safef(indexName, sizeof indexName - sizeof(".bai"), "%s", fileOrUrl);
+        char *lastDot = strrchr(indexName, '.');
+        if (lastDot)
+            {
+            strcpy(lastDot, ".bai");
+            ret = sam_index_load2(sam, fileOrUrl, indexName);
+            }
+        }
     }
-return samDir;
+else
+    ret = sam_index_load2(sam, fileOrUrl, baiFileOrUrl);
+
+return ret;
 }
 
-static bam_index_t *bamOpenIdx(char *fileOrUrl)
-/* If fileOrUrl has a valid accompanying .bai file, parse and return the index;
- * otherwise return NULL. */
-{
-// When file is an URL, this caches the index file in addition to validating:
-// Since samtools's url-handling code saves the .bai file to the current directory,
-// chdir to a trash directory before calling bam_index_load, then chdir back.
-char *runDir = getCurrentDir();
-char *samDir = getSamDir();
-boolean usingUrl = (strstr(fileOrUrl, "tp://") || strstr(fileOrUrl, "https://"));
-if (usingUrl)
-    setCurrentDir(samDir);
-bam_index_t *idx = bam_index_load(fileOrUrl);
-if (usingUrl)
-    setCurrentDir(runDir);
-return idx;
-}
-
-#endif//ndef KNETFILE_HOOKS
 
 static void bamCloseIdx(bam_index_t **pIdx)
 /* Free unless already NULL. */
@@ -89,22 +61,22 @@ if (pIdx != NULL && *pIdx != NULL)
     }
 }
 
+static bam_index_t *bamOpenIdx(samfile_t *sam, char *fileOrUrl)
+/* If fileOrUrl has a valid accompanying .bai file, parse and return the index;
+ * otherwise return NULL. baiFileOrUrl can be NULL. */
+{
+return bamOpenIndexGivenUrl(sam, fileOrUrl, NULL);
+}
+
 boolean bamFileExists(char *fileOrUrl)
 /* Return TRUE if we can successfully open the bam file and its index file.
  * NOTE: this doesn't give enough diagnostics */
 {
 char *bamFileName = fileOrUrl;
 samfile_t *fh = samopen(bamFileName, "rb", NULL);
-#ifdef USE_HTS
 if (fh != NULL)
     {
     bam_index_t *idx = bamOpenIdx(fh, bamFileName);
-#else
-// Check both fh and fh->header; non-NULL fh can have NULL header if header doesn't parse!
-if (fh != NULL && fh->header != NULL)
-    {
-    bam_index_t *idx = bamOpenIdx(bamFileName);
-#endif
     samclose(fh);
     if (idx == NULL)
 	{
@@ -135,11 +107,7 @@ bam_verbose = 1;
 
 samfile_t *fh = samopen(bamFileName, "rb", NULL);
 // Check both fh and fh->header; non-NULL fh can have NULL header if header doesn't parse!
-#ifdef USE_HTS
 if (fh == NULL)
-#else
-if (fh == NULL || fh->header == NULL)
-#endif
     {
     boolean usingUrl = (strstr(fileOrUrl, "tp://") || strstr(fileOrUrl, "https://"));
     struct dyString *urlWarning = dyStringNew(0);
@@ -149,10 +117,6 @@ if (fh == NULL || fh->header == NULL)
 		       ". If you are able to access the URL with your web browser, "
 		       "please try reloading this page.");
 	}
-#ifndef USE_HTS
-    else if (fh != NULL && fh->header == NULL)
-	dyStringAppend(urlWarning, ": parser error while reading the file header.");
-#endif
     errAbort("Failed to open %s%s", fileOrUrl, urlWarning->string);
     }
 return fh;
@@ -185,34 +149,25 @@ if (pSamFile != NULL)
     }
 }
 
-void bamFileAndIndexMustExist(char *fileOrUrl)
+void bamFileAndIndexMustExist(char *fileOrUrl, char *baiFileOrUrl)
 /* Open both a bam file and its accompanying index or errAbort; this is what it
  * takes for diagnostic info to propagate up through errCatches in calling code. */
 {
 samfile_t *bamF = bamOpen(fileOrUrl, NULL);
-#ifdef USE_HTS
-bam_index_t *idx = bamOpenIdx(bamF, fileOrUrl);
-#else
-bam_index_t *idx = bamOpenIdx(fileOrUrl);
-#endif
+bam_index_t *idx = bamOpenIndexGivenUrl(bamF, fileOrUrl, baiFileOrUrl);
 if (idx == NULL)
     errAbort("failed to read index file (.bai) corresponding to %s", fileOrUrl);
 bamCloseIdx(&idx);
 bamClose(&bamF);
 }
 
-#ifdef USE_HTS
 void bamFetchAlreadyOpen(samfile_t *samfile, bam_hdr_t *header,  bam_index_t *idx, char *bamFileName, 
-#else
-void bamFetchAlreadyOpen(samfile_t *samfile, bam_index_t *idx, char *bamFileName, 
-#endif
 			 char *position, bam_fetch_f callbackFunc, void *callbackData)
 /* With the open bam file, return items the same way with the callbacks as with bamFetch() */
 /* except in this case use an already-open bam file and index (use bam_index_load and free() for */
 /* the index). It seems a little strange to pass the filename in with the open bam, but */
 /* it's just used to report errors. */
 {
-#ifdef USE_HTS
 bam1_t *b;
 AllocVar(b);
 hts_itr_t *iter = sam_itr_querys(idx, header, position);
@@ -262,23 +217,13 @@ if (samfile->format.format == cram)
             }
         }
     }
-#else
-int chromId, start, end;
-int ret = bam_parse_region(samfile->header, position, &chromId, &start, &end);
-if (ret != 0 && startsWith("chr", position))
-    ret = bam_parse_region(samfile->header, position+strlen("chr"), &chromId, &start, &end);
-if (ret != 0)
-    // If the bam file does not cover the current chromosome, OK
-    return;
-ret = bam_fetch(samfile->x.bam, idx, chromId, start, end, callbackData, callbackFunc);
-if (ret != 0)
-    warn("bam_fetch(%s, %s (chromId=%d) failed (%d)", bamFileName, position, chromId, ret);
-#endif
 }
 
-void bamFetchPlus(char *fileOrUrl, char *position, bam_fetch_f callbackFunc, void *callbackData,
+void bamAndIndexFetchPlus(char *fileOrUrl, char *baiFileOrUrl, char *position, bam_fetch_f callbackFunc, void *callbackData,
 		 samfile_t **pSamFile, char *refUrl, char *cacheDir)
-/* Open the .bam file, fetch items in the seq:start-end position range,
+/* Open the .bam file with the .bai index specified by baiFileOrUrl.
+ * baiFileOrUrl can be NULL and defaults to <fileOrUrl>.bai.
+ * Fetch items in the seq:start-end position range,
  * and call callbackFunc on each bam item retrieved from the file plus callbackData.
  * This handles BAM files with "chr"-less sequence names, e.g. from Ensembl. 
  * The pSamFile parameter is optional.  If non-NULL it will be filled in, just for
@@ -286,7 +231,6 @@ void bamFetchPlus(char *fileOrUrl, char *position, bam_fetch_f callbackFunc, voi
 {
 char *bamFileName = NULL;
 samfile_t *fh = bamOpen(fileOrUrl, &bamFileName);
-#ifdef USE_HTS
 if (fh->format.format == cram) 
     {
     if (cacheDir == NULL)
@@ -296,24 +240,76 @@ if (fh->format.format == cram)
 bam_hdr_t *header = sam_hdr_read(fh);
 if (pSamFile != NULL)
     *pSamFile = fh;
-bam_index_t *idx = bamOpenIdx(fh, bamFileName);
-#else
-if (pSamFile != NULL)
-    *pSamFile = fh;
-bam_index_t *idx = bamOpenIdx(bamFileName);
-#endif
+bam_index_t *idx = bamOpenIndexGivenUrl(fh, bamFileName, baiFileOrUrl);
 if (idx == NULL)
     warn("bam_index_load(%s) failed.", bamFileName);
 else
     {
-#ifdef USE_HTS
     bamFetchAlreadyOpen(fh, header, idx, bamFileName, position, callbackFunc, callbackData);
-#else
-    bamFetchAlreadyOpen(fh, idx, bamFileName, position, callbackFunc, callbackData);
-#endif
     bamCloseIdx(&idx);
     }
 bamClose(&fh);
+}
+
+static int bamGetTargetCount(char *fileOrUrl)
+/* Return the number of target sequences in a bam or cram file. */
+{
+int tCount = 0;
+htsFile *htsF = hts_open(fileOrUrl, "r");
+if (htsF->format.format == crai)
+    {
+    SAM_hdr *cramHdr = cram_fd_get_header(htsF->fp.cram);
+    tCount = cramHdr->nref;
+    }
+else
+    {
+    bam_hdr_t *bamHdr = bam_hdr_read(htsF->fp.bgzf);
+    tCount = bamHdr->n_targets;
+    }
+hts_close(htsF);
+return tCount;
+}
+
+long long bamFileItemCount(char *fileOrUrl, char *baiFileOrUrl)
+/* Return the total number of mapped items across all sequences in fileOrUrl, using index file.
+ * If baiFileOrUrl is NULL, the index file is assumed to be fileOrUrl.bai.
+ * NOTE: not all bam index files include mapped item counts, so this may return 0 even for large
+ * bam.  As of May 2019, our copy of hts_idx_get_stat does not support cram indexes
+ * (perhaps they never include counts?), so this always returns 0 for cram. */
+{
+long long itemCount = 0;
+hts_idx_t *idx = NULL;
+if (isNotEmpty(baiFileOrUrl))
+    idx = hts_idx_load2(fileOrUrl, baiFileOrUrl);
+else
+    {
+    int format = endsWith(fileOrUrl, ".cram") ? HTS_FMT_CRAI : HTS_FMT_BAI;
+    idx = hts_idx_load(fileOrUrl, format);
+    }
+if (idx == NULL)
+    warn("bamFileItemCount: hts_idx_load(%s) failed.", baiFileOrUrl ? baiFileOrUrl : fileOrUrl);
+else
+    {
+    int tCount = bamGetTargetCount(fileOrUrl);
+    int tid;
+    for (tid = 0;  tid < tCount;  tid++)
+        {
+        uint64_t mapped, unmapped;
+        int ret = hts_idx_get_stat(idx, tid, &mapped, &unmapped);
+        if (ret == 0)
+            itemCount += mapped;
+        // ret is -1 if counts are unavailable.
+        }
+    hts_idx_destroy(idx);
+    idx = NULL;
+    }
+return itemCount;
+}
+
+void bamFetchPlus(char *fileOrUrl, char *position, bam_fetch_f callbackFunc, void *callbackData,
+		 samfile_t **pSamFile, char *refUrl, char *cacheDir)
+{
+bamAndIndexFetchPlus(fileOrUrl, NULL, position, callbackFunc, callbackData, pSamFile, refUrl, cacheDir);
 }
 
 void bamFetch(char *fileOrUrl, char *position, bam_fetch_f callbackFunc, void *callbackData,
@@ -663,248 +659,89 @@ while (s < bam->data + bam->data_len)
     }
 }
 
-#ifndef USE_HTS
-struct bamChromInfo *bamChromList(samfile_t *fh)
+struct psl *bamToPslUnscored(const bam1_t *bam, const bam_hdr_t *hdr)
+/* Translate BAM's numeric CIGAR encoding into PSL sufficient for cds.c (just coords,
+ * no scoring info) */
 {
-/* Return list of chromosomes from bam header. We make no attempty to normalize chromosome names to UCSC format,
-   so list may contain things like "1" for "chr1", "I" for "chrI", "MT" for "chrM" etc. */
-int i;
-struct bamChromInfo *list = NULL;
-bam_header_t *bamHeader = fh->header;
-if(bamHeader == NULL)
+const bam1_core_t *core = &bam->core;
+
+if (core->tid == -1)
     return NULL;
-for(i = 0; i < bamHeader->n_targets; i++)
-    {
-    struct bamChromInfo *info = NULL;
-    AllocVar(info);
-    info->name = cloneString(bamHeader->target_name[i]);
-    info->size = bamHeader->target_len[i];
-    slAddHead(&list, info);
-    }
-slReverse(&list);
-return list;
-}
 
-void samToOpenBed(char *samIn, FILE *f)
-/* Like samToOpenBed, but the output is the already open file f. */
-{
-samfile_t *sf = samopen(samIn, "r", NULL);
-bam_header_t *bamHeader = sf->header;
-bam1_t one;
-ZeroVar(&one);
-int err;
-while ((err = samread(sf, &one)) >= 0)
+struct psl *psl;
+AllocVar(psl);
+boolean isRc = (core->flag & BAM_FREVERSE);
+psl->strand[0] = isRc ? '-' : '+';
+psl->qName = cloneString(bam1_qname(bam));
+psl->tName = cloneString(hdr->target_name[core->tid]);
+unsigned blockCount = 0;
+unsigned *blockSizes, *qStarts, *tStarts;
+AllocArray(blockSizes, core->n_cigar);
+AllocArray(qStarts, core->n_cigar);
+AllocArray(tStarts, core->n_cigar);
+int tPos = core->pos, qPos = 0, qLength = 0;
+unsigned int *cigar = bam1_cigar(bam);
+int i;
+for (i = 0;  i < core->n_cigar;  i++)
     {
-    int32_t tid = one.core.tid;
-    if (tid < 0)
-        continue;
-    char *chrom = bamHeader->target_name[tid];
-    // Approximate here... can do better if parse cigar.
-    int start = one.core.pos;
-    int size = one.core.l_qseq;
-    int end = start + size;	
-    boolean isRc = (one.core.flag & BAM_FREVERSE);
-    char strand = '+';
-    if (isRc)
+    char op;
+    int n = bamUnpackCigarElement(cigar[i], &op);
+    switch (op)
 	{
-	strand = '-';
-	reverseIntRange(&start, &end, bamHeader->target_len[tid]);
+	case 'X': // mismatch (gapless aligned block)
+	case '=': // match (gapless aligned block)
+	case 'M': // match or mismatch (gapless aligned block)
+	    blockSizes[blockCount] = n;
+	    qStarts[blockCount] = qPos;
+	    tStarts[blockCount] = tPos;
+	    blockCount++;
+	    tPos += n;
+	    qPos += n;
+	    qLength += n;
+            if (op == 'X')
+               psl->misMatch += n;
+            else
+               psl->match += n;
+	    break;
+	case 'I': // inserted in query
+	    qPos += n;
+	    qLength += n;
+	    break;
+	case 'D': // deleted from query
+	case 'N': // long deletion from query (intron as opposed to small del)
+	    tPos += n;
+	    break;
+	case 'S': // skipped query bases at beginning or end ("soft clipping")
+	    qPos += n;
+	    qLength += n;
+	    break;
+	case 'H': // skipped query bases not stored in record's query sequence ("hard clipping")
+	case 'P': // P="silent deletion from padded reference sequence" -- ignore these.
+	    break;
+	default:
+	    errAbort("bamToPsl: unrecognized CIGAR op %c -- update me", op);
 	}
-    fprintf(f, "%s\t%d\t%d\t.\t0\t%c\n", chrom, start, end, strand);
     }
-if (err < 0 && err != -1)
-    errnoAbort("samread err %d", err);
-samclose(sf);
-}
 
-void samToBed(char *samIn, char *bedOut)
-/* samToBed - Convert SAM file to a pretty simple minded bed file.. */
-{
-FILE *f = mustOpen(bedOut, "w");
-samToOpenBed(samIn, f);
-carefulClose(&f);
-}
-#endif
-
-#else
-// If we're not compiling with samtools, make stub routines so compile won't fail:
-
-boolean bamFileExists(char *bamFileName)
-/* Return TRUE if we can successfully open the bam file and its index file. */
-{
-warn(COMPILE_WITH_SAMTOOLS, "bamFileExists");
-return FALSE;
-}
-
-void bamFileAndIndexMustExist(char *fileOrUrl)
-/* Open both a bam file and its accompanying index or errAbort; this is what it
- * takes for diagnostic info to propagate up through errCatches in calling code. */
-{
-errAbort(COMPILE_WITH_SAMTOOLS, "bamFileAndIndexMustExist");
-}
-
-samfile_t *bamOpen(char *fileOrUrl, char **retBamFileName)
-/* Return an open bam file */
-{
-warn(COMPILE_WITH_SAMTOOLS, "bamOpen");
-return FALSE;
-}
-
-samfile_t *bamMustOpenLocal(char *fileName, char *mode, void *extraHeader)
-/* Open up sam or bam file or die trying.  The mode parameter is 
- *    "r" - open SAM to read
- *    "rb" - open BAM to read
- *    "w" - open SAM to write
- *    "wb" - open BAM to write
- * The extraHeader is generally NULL in the read case, and the write case
- * contains a pointer to a bam_header_t with information about the header.
- * The implementation is just a wrapper around samopen from the samtools library
- * that aborts with error message if there's a problem with the open. */
-{
-warn(COMPILE_WITH_SAMTOOLS, "bamMustOpenLocal");
-return FALSE;
-}
-
-void bamClose(samfile_t **pSamFile)
-/* Close down a samefile_t */
-{
-errAbort(COMPILE_WITH_SAMTOOLS, "bamClose");
-}
-
-void bamFetch(char *fileOrUrl, char *position, bam_fetch_f callbackFunc, void *callbackData,
-	      samfile_t **pSamFile)
-/* Open the .bam file, fetch items in the seq:start-end position range,
- * and call callbackFunc on each bam item retrieved from the file plus callbackData.
- * This handles BAM files with "chr"-less sequence names, e.g. from Ensembl.
- * The pSamFile parameter is optional.  If non-NULL it will be filled in, just for
- * the benefit of the callback function, with the open samFile.  */
-{
-errAbort(COMPILE_WITH_SAMTOOLS, "bamFetch");
-}
-
-boolean bamIsRc(const bam1_t *bam)
-/* Return TRUE if alignment is on - strand. */
-{
-errAbort(COMPILE_WITH_SAMTOOLS, "bamIsRc");
-return FALSE;
-}
-
-void bamGetSoftClipping(const bam1_t *bam, int *retLow, int *retHigh, int *retClippedQLen)
-/* If retLow is non-NULL, set it to the number of "soft-clipped" (skipped) bases at
- * the beginning of the query sequence and quality; likewise for retHigh at end.
- * For convenience, retClippedQLen is the original query length minus soft clipping
- * (and the length of the query sequence that will be returned). */
-{
-errAbort(COMPILE_WITH_SAMTOOLS, "bamGetSoftClipping");
-}
-
-char *bamGetQuerySequence(const bam1_t *bam, boolean useStrand)
-/* Return the nucleotide sequence encoded in bam.  The BAM format
- * reverse-complements query sequence when the alignment is on the - strand,
- * so if useStrand is given we rev-comp it back to restore the original query
- * sequence. */
-{
-errAbort(COMPILE_WITH_SAMTOOLS, "bamGetQuerySequence");
-return NULL;
-}
-
-UBYTE *bamGetQueryQuals(const bam1_t *bam, boolean useStrand)
-/* Return the base quality scores encoded in bam as an array of ubytes. */
-{
-errAbort(COMPILE_WITH_SAMTOOLS, "bamGetQueryQuals");
-return NULL;
-}
-
-char *bamGetCigar(const bam1_t *bam)
-/* Return a BAM-enhanced CIGAR string, decoded from the packed encoding in bam. */
-{
-errAbort(COMPILE_WITH_SAMTOOLS, "bamGetCigar");
-return NULL;
-}
-
-void bamShowCigarEnglish(const bam1_t *bam)
-/* Print out cigar in English e.g. "20 (mis)Match, 1 Deletion, 3 (mis)Match" */
-{
-errAbort(COMPILE_WITH_SAMTOOLS, "bamShowCigarEnglish");
-}
-
-void bamShowFlagsEnglish(const bam1_t *bam)
-/* Print out flags in English, e.g. "Mate is on '-' strand; Properly paired". */
-{
-errAbort(COMPILE_WITH_SAMTOOLS, "bamShowFlagsEnglish");
-}
-
-int bamGetTargetLength(const bam1_t *bam)
-/* Tally up the alignment's length on the reference sequence from
- * bam's packed-int CIGAR representation. */
-{
-errAbort(COMPILE_WITH_SAMTOOLS, "bamGetTargetLength");
-return 0;
-}
-
-bam1_t *bamClone(const bam1_t *bam)
-/* Return a newly allocated copy of bam. */
-{
-errAbort(COMPILE_WITH_SAMTOOLS, "bamClone");
-return NULL;
-}
-
-void bamShowTags(const bam1_t *bam)
-/* Print out tags in HTML: bold key, no type indicator for brevity. */
-{
-errAbort(COMPILE_WITH_SAMTOOLS, "bamShowTags");
-}
-
-char *bamGetTagString(const bam1_t *bam, char *tag, char *buf, size_t bufSize)
-/* If bam's tags include the given 2-character tag, place the value into
- * buf (zero-terminated, trunc'd if nec) and return a pointer to buf,
- * or NULL if tag is not present. */
-{
-errAbort(COMPILE_WITH_SAMTOOLS, "bamGetTagString");
-return NULL;
-}
-
-struct bamChromInfo *bamChromList(samfile_t *fh)
-{
-errAbort(COMPILE_WITH_SAMTOOLS, "bamChromList");
-return NULL;
-}
-
-void samToBed(char *samIn, char *bedOut)
-/* samToBed - Convert SAM file to a pretty simple minded bed file.. */
-{
-errAbort(COMPILE_WITH_SAMTOOLS, "samToBed");
-}
-
-void samToOpenBed(char *samIn, FILE *bedOut)
-/* samToBed - Convert SAM file to a pretty simple minded bed file.. */
-{
-errAbort(COMPILE_WITH_SAMTOOLS, "samToOpenBed");
-}
-
-#endif//ndef USE_BAM
-
-static void bamChromInfoFree(struct bamChromInfo **pInfo)
-/* Free up one chromInfo */
-{
-struct bamChromInfo *info = *pInfo;
-if (info != NULL)
+if (blockCount == 0)
     {
-    freeMem(info->name);
-    freez(pInfo);
+    pslFree(&psl);
+    return NULL;
     }
-}
 
-void bamChromInfoFreeList(struct bamChromInfo **pList)
-/* Free a list of dynamically allocated bamChromInfo's */
-{
-struct bamChromInfo *el, *next;
-
-for (el = *pList; el != NULL; el = next)
-    {
-    next = el->next;
-    bamChromInfoFree(&el);
-    }
-*pList = NULL;
+psl->tSize = hdr->target_len[core->tid];
+psl->tStart = tStarts[0];
+psl->tEnd = tStarts[blockCount-1] + blockSizes[blockCount-1];
+psl->qSize = qLength;
+psl->qStart = qStarts[0];
+psl->qEnd = qStarts[blockCount-1] + blockSizes[blockCount-1];
+if (isRc)
+    reverseIntRange(&psl->qStart, &psl->qEnd, psl->qSize);
+psl->blockCount = blockCount;
+psl->blockSizes = blockSizes;
+psl->qStarts = qStarts;
+psl->tStarts = tStarts;
+pslComputeInsertCounts(psl);
+return psl;
 }
 

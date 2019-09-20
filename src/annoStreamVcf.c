@@ -148,6 +148,7 @@ if (regionChrom != NULL && words != NULL)
 	// If lineFileSetTabixRegion fails, just keep the current file position
 	// -- hopefully we'll just be skipping to the next row after region{Chrom,Start,End}.
 	lineFileSetTabixRegion(self->vcff->lf, regionChrom, regionStart, regionEnd);
+        rowChrom = regionChrom;
 	}
     // Skip to next row if this is on a previous chromosome, or is on regionChrom but
     // ends before regionStart or ends at regionStart and is not an insertion.
@@ -159,6 +160,9 @@ if (regionChrom != NULL && words != NULL)
               (rec->chromStart != rec->chromEnd && rec->chromEnd == regionStart)))))
         {
 	words = nextRowRaw(self);
+        if (words == NULL)
+            break;
+        rowChrom = getProperChromName(self, words[0]);
         rec = self->record;
         }
     }
@@ -352,7 +356,7 @@ lmCleanup(&self->qLm);
 annoStreamerFree(pVSelf);
 }
 
-struct annoStreamer *annoStreamVcfNew(char *fileOrUrl, boolean isTabix, struct annoAssembly *aa,
+struct annoStreamer *annoStreamVcfNew(char *fileOrUrl, char *indexUrl, boolean isTabix, struct annoAssembly *aa,
 				      int maxRecords)
 /* Create an annoStreamer (subclass) object from a VCF file, which may
  * or may not have been compressed and indexed by tabix. */
@@ -360,7 +364,7 @@ struct annoStreamer *annoStreamVcfNew(char *fileOrUrl, boolean isTabix, struct a
 int maxErr = -1; // don't errAbort on VCF format warnings/errs
 struct vcfFile *vcff;
 if (isTabix)
-    vcff = vcfTabixFileMayOpen(fileOrUrl, NULL, 0, 0, maxErr, 0);
+    vcff = vcfTabixFileAndIndexMayOpen(fileOrUrl, indexUrl, NULL, 0, 0, maxErr, 0);
 else
     vcff = vcfFileMayOpen(fileOrUrl, NULL, 0, 0, maxErr, 0, FALSE);
 if (vcff == NULL)

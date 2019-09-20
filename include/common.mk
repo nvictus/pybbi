@@ -1,4 +1,5 @@
-CC=gcc
+# if CC is undefined, set it to gcc
+CC?=gcc
 # to build on sundance: CC=gcc -mcpu=v9 -m64
 ifeq (${COPT},)
     COPT=-O -g
@@ -17,35 +18,53 @@ ifneq (,$(findstring -,$(MACHTYPE)))
 endif
 
 HG_DEFS=-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_GNU_SOURCE -DMACHTYPE_${MACHTYPE}
-HG_INC+=-I../inc -I../../inc -I../../../inc -I../../../../inc -I../../../../../inc
+HG_INC+=-I../inc -I../../inc -I../../../inc -I../../../../inc -I../../../../../inc -I$(kentSrc)/htslib
 
 # to check for Mac OSX Darwin specifics:
 UNAME_S := $(shell uname -s)
 # to check for builds on hgwdev
-FULLWARN = $(shell uname -n)
+HOSTNAME = $(shell uname -n)
 
-#global external libraries 
-L=
+ifeq (${HOSTNAME},hgwdev)
+  IS_HGWDEV = yes
+else
+  IS_HGWDEV = no
+endif
+
+ifeq (${IS_HGWDEV},yes)
+  FULLWARN = yes
+endif
+
+ifeq (${HOSTNAME},cirm-01)
+  FULLWARN = yes
+endif
+
+ifeq (${PTHREADLIB},)
+  PTHREADLIB=-lpthread
+endif
+
+# required extra library on Mac OSX
+ICONVLIB=
 
 # pthreads is required
 ifneq ($(UNAME_S),Darwin)
-  L+=-pthread
+  L+=${PTHREADLIB}
+else
+  ifneq ($(wildcard /opt/local/lib/libiconv.a),)
+       ICONVLIB=/opt/local/lib/libiconv.a
+  else
+       ICONVLIB=-liconv
+  endif
 endif
 
 # autodetect if openssl is installed
 ifeq (${SSLDIR},)
   SSLDIR = /usr/include/openssl
 endif
-ifeq (${USE_SSL},)
-  ifneq ($(wildcard ${SSLDIR}),)
-     USE_SSL=1
-  endif
-endif
-
 
 # autodetect UCSC installation of hal:
 ifeq (${HALDIR},)
-    HALDIR = /hive/groups/browser/hal/halRelease
+    HALDIR = /hive/groups/browser/hal/halRelease/hal.2015-11-11
     ifneq ($(wildcard ${HALDIR}),)
         ifeq (${USE_HAL},)
           USE_HAL=1
@@ -54,27 +73,53 @@ ifeq (${HALDIR},)
 endif
 
 ifeq (${USE_HAL},1)
-    HALLIBS=${HALDIR}/lib/halMaf.a ${HALDIR}/lib/halChain.a ${HALDIR}/lib/halMaf.a ${HALDIR}/lib/halLiftover.a ${HALDIR}/lib/halLod.a ${HALDIR}/lib/halLib.a ${HALDIR}/lib/sonLib.a ${HALDIR}/lib/libhdf5_cpp.a ${HALDIR}/lib/libhdf5.a ${HALDIR}/lib/libhdf5_hl.a 
+    HALLIBS=${HALDIR}/lib/halMaf.a ${HALDIR}/lib/halChain.a ${HALDIR}/lib/halMaf.a ${HALDIR}/lib/halLiftover.a ${HALDIR}/lib/halLod.a ${HALDIR}/lib/halLib.a ${HALDIR}/lib/sonLib.a ${HALDIR}/lib/libhdf5_cpp.a ${HALDIR}/lib/libhdf5.a ${HALDIR}/lib/libhdf5_hl.a -lstdc++
     HG_DEFS+=-DUSE_HAL
     HG_INC+=-I${HALDIR}/inc
+endif
+# on hgwdev, include HAL by defaults
+ifeq (${IS_HGWDEV},yes)
+   L+=${HALLIBS}
 endif
 
 
 # libssl: disabled by default
-ifeq (${USE_SSL},1)
-    ifneq (${SSL_DIR}, "/usr/include/openssl")
-      ifneq ($(UNAME_S),Darwin)
-        L+=-L${SSL_DIR}/lib
-      endif
-        HG_INC+=-I${SSL_DIR}/include
+ifneq (${SSL_DIR}, "/usr/include/openssl")
+  ifneq ($(UNAME_S),Darwin)
+    ifneq ($(wildcard ${SSL_DIR}),)
+      L+=-L${SSL_DIR}/lib
     endif
-    # on hgwdev, already using the static library with mysqllient.
-    ifeq (${FULLWARN},hgwdev)
-       L+=/usr/lib64/libssl.a /usr/lib64/libcrypto.a -lkrb5
-    else
-       L+=-lssl -lcrypto
-    endif
-    HG_DEFS+=-DUSE_SSL
+  endif
+    HG_INC+=-I${SSL_DIR}/include
+endif
+# on hgwdev, already using the static library with mysqllient.
+ifeq (${IS_HGWDEV},yes)
+   L+=/usr/lib64/libssl.a /usr/lib64/libcrypto.a -lkrb5 -lk5crypto -ldl
+else
+   ifneq ($(wildcard /opt/local/lib/libssl.a),)
+       L+=/opt/local/lib/libssl.a
+   else
+     ifneq ($(wildcard /usr/lib/x86_64-linux-gnu/libssl.a),)
+	L+=/usr/lib/x86_64-linux-gnu/libssl.a
+     else
+	L+=-lssl
+     endif
+   endif
+   ifneq ($(wildcard /opt/local/lib/libcrypto.a),)
+       L+=/opt/local/lib/libcrypto.a
+   else
+       L+=-lcrypto
+   endif
+endif
+
+# autodetect where libm is installed
+ifeq (${MLIB},)
+  ifneq ($(wildcard /usr/lib64/libm.a),)
+      MLIB=-lm
+  endif
+endif
+ifeq (${MLIB},)
+  MLIB=-lm
 endif
 
 # autodetect where png is installed
@@ -117,9 +162,14 @@ endif
 # do not need to do this during 'clean' target (this is very slow for 'clean')
 ifneq ($(MAKECMDGOALS),clean)
   # on hgwdev, use the static library.
-  ifeq (${FULLWARN},hgwdev)
+  ifeq (${IS_HGWDEV},yes)
     MYSQLINC=/usr/include/mysql
-    MYSQLLIBS=/usr/lib64/libssl.a /usr/lib64/libcrypto.a /usr/lib64/mysql/libmysqlclient.a -lkrb5
+    MYSQLLIBS=/usr/lib64/libmysqlclient.a /usr/lib64/libssl.a /usr/lib64/libcrypto.a -lkrb5 -ldl -lz
+  endif
+  ifeq (${MYSQLLIBS},)
+    ifneq ($(wildcard /usr/lib/x86_64-linux-gnu/libmysqlclient.a),)
+	  MYSQLLIBS=/usr/lib/x86_64-linux-gnu/libmysqlclient.a -ldl
+    endif
   endif
   # this does *not* work on Mac OSX with the dynamic libraries
   ifneq ($(UNAME_S),Darwin)
@@ -144,8 +194,23 @@ ifneq ($(MAKECMDGOALS),clean)
     endif
   endif
   ifeq (${MYSQLINC},)
+    ifneq ($(wildcard /opt/local/include/mysql57/mysql/mysql.h),)
+	  MYSQLINC=/opt/local/include/mysql57/mysql
+    endif
+  endif
+  ifeq (${MYSQLINC},)
     ifneq ($(wildcard /opt/local/include/mysql55/mysql/mysql.h),)
 	  MYSQLINC=/opt/local/include/mysql55/mysql
+    endif
+  endif
+  ifeq (${MYSQLLIBS},)
+    ifneq ($(wildcard /opt/local/lib/mysql57/mysql/libmysqlclient.a),)
+	  MYSQLLIBS=/opt/local/lib/mysql57/mysql/libmysqlclient.a
+    endif
+  endif
+  ifeq (${MYSQLLIBS},)
+    ifneq ($(wildcard /opt/local/lib/mysql55/mysql/libmysqlclient.a),)
+	  MYSQLLIBS=/opt/local/lib/mysql55/mysql/libmysqlclient.a
     endif
   endif
   ifeq (${MYSQLLIBS},)
@@ -204,8 +269,8 @@ endif
 
 # OK to add -lstdc++ to all MYSQLLIBS just in case it is
 #    MySQL version 5.6 libraries, but no 'librt' on Mac OSX
-ifeq (${FULLWARN},hgwdev)
-  MYSQLLIBS += /usr/lib/gcc/x86_64-redhat-linux/4.4.4/libstdc++.a /usr/lib/debug/usr/lib64/librt.a
+ifeq (${IS_HGWDEV},yes)
+  MYSQLLIBS += /usr/lib/gcc/x86_64-redhat-linux/4.8.5/libstdc++.a /usr/lib64/librt.a
 else
   ifeq ($(UNAME_S),Darwin)
     MYSQLLIBS += -lstdc++
@@ -214,29 +279,21 @@ else
   endif
 endif
 
-L+=${PNGLIB}
+ifeq (${ZLIB},)
+  ZLIB=-lz
+  ifneq ($(wildcard /opt/local/lib/libz.a),)
+    ZLIB=/opt/local/lib/libz.a
+  endif
+  ifneq ($(wildcard /usr/lib64/libz.a),)
+    ZLIB=/usr/lib64/libz.a
+  endif
+endif
+
+#global external libraries
+L += $(kentSrc)/htslib/libhts.a
+
+L+=${PNGLIB} ${MLIB} ${ZLIB} ${ICONVLIB}
 HG_INC+=${PNGINCL}
-
-# autodetect UCSC installation of htslib:
-ifeq (${HTSDIR},)
-    HTSDIR = /hive/data/outside/htslib/${MACHTYPE}
-    ifneq ($(wildcard ${HTSDIR}),)
-        ifeq (${USE_HTS},)
-            USE_HTS=1
-        endif
-    endif
-endif
-
-
-# autodetect UCSC installation of samtabix:
-ifeq (${SAMTABIXDIR},)
-    SAMTABIXDIR = /hive/data/outside/samtabix/${MACHTYPE}
-    ifneq ($(wildcard ${SAMTABIXDIR}),)
-        ifeq (${USE_SAMTABIX},)
-          USE_SAMTABIX=1
-        endif
-    endif
-endif
 
 # pass through COREDUMP
 ifneq (${COREDUMP},)
@@ -250,63 +307,6 @@ ifneq ($(wildcard ${GBIBDIR}/*.c),)
   HG_INC += -I${GBIBDIR}
 endif
 
-ifeq (${USE_HTS},1)
-    HG_DEFS+=-DUSE_HTS
-    USE_SAMTABIX=1
-    SAMTABIXDIR = ${HTSDIR}
-    SAMTABIXLIB=${HTSDIR}/libhts.a
-endif
-
-# libsamtabix (samtools + tabix + Angie's KNETFILE_HOOKS extension to it): disabled by default
-ifeq (${USE_SAMTABIX},1)
-    KNETFILE_HOOKS=1
-    USE_BAM=1
-    USE_TABIX=1
-    ifeq (${SAMTABIXINC},)
-        SAMTABIXINC = ${SAMTABIXDIR}
-    endif
-    ifeq (${SAMTABIXLIB},)
-        SAMTABIXLIB = ${SAMTABIXDIR}/libsamtabix.a
-    endif
-    HG_INC += -I${SAMTABIXINC}
-    L+=${SAMTABIXLIB} -lz
-    HG_DEFS+=-DUSE_SAMTABIX -DUSE_BAM -DUSE_TABIX -DKNETFILE_HOOKS
-else
-  # Deprecated but supported for mirrors, for now: independent samtools and tabix libs
-
-  # libbam (samtools, and Angie's KNETFILE_HOOKS extension to it): disabled by default
-  ifeq (${USE_BAM},1)
-      ifeq (${SAMINC},)
-          SAMINC = ${SAMDIR}
-      endif
-      ifeq (${SAMLIB},)
-          SAMLIB = ${SAMDIR}/libbam.a
-      endif
-      HG_INC += -I${SAMINC}
-      L+=${SAMLIB}
-      HG_DEFS+=-DUSE_BAM
-      ifeq (${KNETFILE_HOOKS},1)
-          HG_DEFS+=-DKNETFILE_HOOKS
-      endif
-  endif
-
-  # libtabix and Angie's KNETFILE_HOOKS extension to it: disabled by default
-  ifeq (${USE_TABIX},1)
-      ifeq (${TABIXINC},)
-          TABIXINC = ${TABIXDIR}
-      endif
-      ifeq (${TABIXLIB},)
-          TABIXLIB = ${TABIXDIR}/libtabix.a
-      endif
-      HG_INC += -I${TABIXINC}
-      L+=${TABIXLIB} -lz
-      HG_DEFS+=-DUSE_TABIX
-      ifeq (${KNETFILE_HOOKS},1)
-	HG_DEFS+=-DKNETFILE_HOOKS
-      endif
-  endif
-endif
-
 SYS = $(shell uname -s)
 
 ifeq (${HG_WARN},)
@@ -318,7 +318,7 @@ ifeq (${HG_WARN},)
       HG_WARN = -Wall -Wformat -Wimplicit -Wreturn-type
       HG_WARN_UNINIT=-Wuninitialized
     else
-      ifeq (${FULLWARN},hgwdev)
+      ifeq (${FULLWARN},yes)
         HG_WARN = -Wall -Werror -Wformat -Wformat-security -Wimplicit -Wreturn-type -Wempty-body -Wunused-but-set-variable
         HG_WARN_UNINIT=-Wuninitialized
       else
@@ -370,7 +370,7 @@ endif
 CVS=cvs
 GIT=git
 
-# portable naming of compiled executables: add ".exe" if compiled on 
+# portable naming of compiled executables: add ".exe" if compiled on
 # Windows (with cygwin).
 ifeq (${OS}, Windows_NT)
   AOUT=a

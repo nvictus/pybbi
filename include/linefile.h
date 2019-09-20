@@ -10,8 +10,6 @@
 #include "dystring.h"
 #include "udc.h"
 
-#ifdef USE_TABIX
-#ifdef USE_HTS
 #define tabix_t tbx_t
 #define ti_iter_t hts_itr_t
 #define ti_open hts_open
@@ -20,10 +18,6 @@
 #define ti_get_tid tbx_name2id
 #define ti_queryi tbx_itr_queryi
 #define ti_iter_destroy tbx_itr_destroy
-#else
-#include "tabix.h"
-#endif
-#endif
 
 #define LF_BOGUS_FILE_PREFIX "somefile."
 
@@ -31,7 +25,8 @@ enum nlType {
  nlt_undet, /* undetermined */
  nlt_unix,  /* lf   */
  nlt_dos,   /* crlf */
- nlt_mac    /* cr   */
+ nlt_mac,   /* cr   */
+ nlt_mixed  /* could be any or all of the above */
 };
 
 struct metaOutput
@@ -64,17 +59,10 @@ struct lineFile
     struct metaOutput *metaOutput;   /* list of FILE handles to write metaData to */
     bool isMetaUnique;          /* if set, do not repeat comments in output */
     struct hash *metaLines;     /* save lines to suppress repetition */
-#ifdef USE_TABIX
-#ifdef USE_HTS
     void *htsFile;              /* HTS file handle */
     void *tabix;		/* A tabix-compressed file and its binary index file (.tbi) */
     void *tabixIter;	        /* An iterator to get decompressed indexed lines of text */
     void *kline;                /* A buffer used for reading from htsfile. */
-#else
-    tabix_t *tabix;		/* A tabix-compressed file and its binary index file (.tbi) */
-    ti_iter_t tabixIter;	/* An iterator to get decompressed indexed lines of text */
-#endif
-#endif
     struct udcFile *udcFile;    /* udc file if using caching */
     struct dyString *fullLine;  // Filled with full line when a lineFileNextFull is called
     struct dyString *rawLines;  // Filled with raw lines used to create the full line
@@ -298,6 +286,13 @@ void lineFileRemoveInitialCustomTrackLines(struct lineFile *lf);
      "http://samtools.sourceforge.net/ and rebuilt kent/src with USE_TABIX=1\n" \
      "(see http://genomewiki.ucsc.edu/index.php/Build_Environment_Variables)."
 
+struct lineFile *lineFileTabixAndIndexMayOpen(char *fileOrUrl, char *tbiFileOrUrl, bool zTerm);
+/* Wrap a line file around a data file that has been compressed and indexed
+ * by the tabix command line program. tbiFileOrUrl can be NULL, it defaults to <fileOrUrl>.tbi.
+ * It must be readable in addition to fileOrUrl. If there's a problem, warn & return NULL.
+ * This works only if kent/src has been compiled with USE_TABIX=1 and linked
+ * with the tabix C library. */
+
 struct lineFile *lineFileTabixMayOpen(char *fileOrUrl, bool zTerm);
 /* Wrap a line file around a data file that has been compressed and indexed
  * by the tabix command line program.  The index file <fileName>.tbi must be
@@ -308,6 +303,10 @@ struct lineFile *lineFileTabixMayOpen(char *fileOrUrl, bool zTerm);
 boolean lineFileSetTabixRegion(struct lineFile *lf, char *seqName, int start, int end);
 /* Assuming lf was created by lineFileTabixMayOpen, tell tabix to seek to the specified region
  * and return TRUE (or if there are no items in region, return FALSE). */
+
+void lineFileCarefulNewlines(struct lineFile *lf);
+/* Tell lf to use a less efficient method of scanning for the next newline that can handle
+ * files with a mix of newline conventions. */
 
 #endif /* LINEFILE_H */
 

@@ -24,6 +24,7 @@
  * for each block of the file that has been fetched.  Currently the block size is 8K. */
 
 #include <sys/file.h>
+#include <sys/mman.h>
 #include "common.h"
 #include "hash.h"
 #include "obscure.h"
@@ -139,6 +140,7 @@ struct udcFile
     bits64 endData;		/* End of area in file we know to have data. */
     bits32 bitmapVersion;	/* Version of associated bitmap we were opened with. */
     struct connInfo connInfo;   /* Connection info for open net connection. */
+    void *mmapBase;             /* pointer to memory address if file has been mmapped, or NULL */
     struct ios ios;             /* Statistics on file access. */
     };
 
@@ -201,7 +203,7 @@ return fread(buf, size, nmemb, stream);
 }
 
 
-static void readAndIgnore(struct ioStats *ioStats, int sd, bits64 size)
+static void udcReadAndIgnore(struct ioStats *ioStats, int sd, bits64 size)
 /* Read size bytes from sd and return. */
 {
 static char *buf = NULL;
@@ -213,12 +215,12 @@ while (remaining > 0)
     bits64 chunkSize = min(remaining, udcBlockSize);
     ssize_t rd = ourRead(ioStats, sd, buf, chunkSize);
     if (rd < 0)
-	errnoAbort("readAndIgnore: error reading socket after %lld bytes", total);
+	errnoAbort("udcReadAndIgnore: error reading socket after %lld bytes", total);
     remaining -= rd;
     total += rd;
     }
 if (total < size)
-    errAbort("readAndIgnore: got EOF at %lld bytes (wanted %lld)", total, size);
+    errAbort("udcReadAndIgnore: got EOF at %lld bytes (wanted %lld)", total, size);
 }
 
 static int connInfoGetSocket(struct udcFile *file, char *url, bits64 offset, int size)
@@ -226,14 +228,26 @@ static int connInfoGetSocket(struct udcFile *file, char *url, bits64 offset, int
  * reuse ci->socket.  Otherwise close the socket, open a new one, and update ci,
  * or return -1 if there is an error opening a new one. */
 {
+/* NOTE: This doesn't use HTTP 1.1 keep alive to do multiple request on the
+ * same socket.  The only way subsequent random requests on the same socket
+ * work is because previous request are open-ended and this can continue
+ * reading where it left off.  The HTTP requests are issued as 1.0, even
+ * through range requests are a 1.1 feature.
+ *
+ * For FTP, the serial read approach is essential.  FTP only supports resuming
+ * from an offset, but doesn't not support limiting the number of bytes
+ * transferred.  All that can be done to stop the transfer is to abort the
+ * operation, when then requires reconnecting.
+ */ 
+
 struct connInfo *ci = &file->connInfo;
 if (ci != NULL && ci->socket > 0 && ci->offset != offset)
     {
     bits64 skipSize = (offset - ci->offset);
     if (skipSize > 0 && skipSize <= MAX_SKIP_TO_SAVE_RECONNECT)
 	{
-	verbose(4, "!! skipping %lld bytes @%lld to avoid reconnect\n", skipSize, ci->offset);
-	readAndIgnore(&file->ios.net, ci->socket, skipSize);
+	verbose(4, "skipping %lld bytes @%lld to avoid reconnect\n", skipSize, ci->offset);
+	udcReadAndIgnore(&file->ios.net, ci->socket, skipSize);
 	ci->offset = offset;
         file->ios.numReuse++;
 	}
@@ -254,6 +268,8 @@ if (ci == NULL || ci->socket <= 0)
 	{
 	url = transferParamsToRedirectedUrl(url, ci->redirUrl);
 	}
+    // IMPORTANT NOTE: byterange is not a real URL parameter, this is a hack to pass
+    // the range to the net.c functions, which then parse it.
     char rangeUrl[2048];
     if (ci == NULL)
 	{
@@ -474,25 +490,53 @@ return total;
 
 boolean udcInfoViaHttp(char *url, struct udcRemoteFileInfo *retInfo)
 /* Gets size and last modified time of URL
- * and returns status of HEAD GET. */
+ * and returns status of HEAD or GET byterange 0-0. */
 {
 verbose(4, "checking http remote info on %s\n", url);
+// URLs passed into here should not have byterange clause.
 int redirectCount = 0;
 struct hash *hash;
 int status;
+char *sizeString = NULL;
+/*
+ For caching, sites should support byte-range and last-modified.
+ However, several groups including ENCODE have made sites that use CGIs to 
+ dynamically generate hub text files such as hub.txt, genome.txt, trackDb.txt.
+ Byte-range and last-modified are difficult to support for this case,
+ so they do without them, effectively defeat caching. Every 5 minutes (udcTimeout),
+ they get re-downloaded, even when the data has not changed.  
+*/
 while (TRUE)
     {
     hash = newHash(0);
     status = netUrlHead(url, hash);
-    if (status == 200)
+    sizeString = hashFindValUpperCase(hash, "Content-Length:");
+    if (status == 200 && sizeString)
 	break;
-    if (status != 301 && status != 302)  
+    /*
+    Using HEAD with HIPPAA-compliant signed AmazonS3 URLs generates 403.
+    The signed URL generated for GET cannot be used with HEAD.
+    Instead call GET with byterange=0-0 in netUrlFakeHeadByGet().
+    This supplies both size via Content-Range response header,
+    as well as Last-Modified header which is important for caching.
+    There are also sites which support byte-ranges 
+    but they do not return Content-Length with HEAD.
+    */
+    if (status == 403 || (status==200 && !sizeString))
+	{ 
+	hashFree(&hash);
+	hash = newHash(0);
+	status = netUrlFakeHeadByGet(url, hash);
+	if (status == 206) 
+	    break;
+	}
+    if (status != 301 && status != 302)
 	return FALSE;
     ++redirectCount;
     if (redirectCount > 5)
 	{
 	warn("code %d redirects: exceeded limit of 5 redirects, %s", status, url);
-	return  FALSE;
+	return FALSE;
 	}
     char *newUrl = hashFindValUpperCase(hash, "Location:");
     retInfo->ci.redirUrl = cloneString(newUrl);
@@ -500,21 +544,48 @@ while (TRUE)
     hashFree(&hash);
     }
 
-char *sizeString = hashFindValUpperCase(hash, "Content-Length:");
-if (sizeString == NULL)
+char *sizeHeader = NULL;
+if (status == 200)
     {
-    /* try to get remote file size by an alternate method */
-    long long retSize = netUrlSizeByRangeResponse(url);
-    if (retSize < 0)
+    sizeHeader = "Content-Length:";
+    // input pattern: Content-Length: 2738262
+    }
+if (status == 206)
+    {
+    sizeHeader = "Content-Range:";
+    // input pattern: Content-Range: bytes 0-99/2738262
+    }
+
+sizeString = hashFindValUpperCase(hash, sizeHeader);
+if (sizeString)
+    {
+    char *parseString = sizeString;
+    if (status == 206)
 	{
-    	hashFree(&hash);
-	errAbort("No Content-Length: returned in header for %s, can't proceed, sorry", url);
+	parseString = strchr(sizeString, '/');
+	if (!parseString)
+	    {
+	    warn("Header value %s is missing '/' in %s in response for url %s", 
+		sizeString, sizeHeader, url);
+	    return FALSE;
+	    }
+	++parseString; // skip past slash
 	}
-    retInfo->size = retSize;
+    if (parseString)
+	{
+	retInfo->size = atoll(parseString);
+	}
+    else
+	{
+	warn("Header value %s is missing or invalid in %s in response for url %s", 
+	    sizeString, sizeHeader, url);
+	return FALSE;
+	}
     }
 else
     {
-    retInfo->size = atoll(sizeString);
+    warn("Response is missing required header %s for url %s", sizeHeader, url);
+    return FALSE;
     }
 
 char *lastModString = hashFindValUpperCase(hash, "Last-Modified:");
@@ -529,6 +600,7 @@ if (lastModString == NULL)
 	errAbort("No Last-Modified: or Date: returned in header for %s, can't proceed, sorry", url);
 	}
     }
+
 struct tm tm;
 time_t t;
 // Last-Modified: Wed, 15 Nov 1995 04:58:08 GMT
@@ -787,9 +859,10 @@ if (bits != NULL)
 	}
     version = bits->version;
     if (bits->remoteUpdate != file->updateTime || bits->fileSize != file->size ||
-	!fileExists(file->sparseFileName))
+	!fileExists(file->sparseFileName) ||
+	(fileSize(file->sparseFileName) == 0 && file->size > 0 && fileSize(file->bitmapFileName) > udcBitmapHeaderSize))
 	{
-	verbose(4, "removing stale version (%lld! = %lld or %lld! = %lld or %s doesn't exist), "
+	verbose(4, "removing stale version (%lld! = %lld or %lld! = %lld or %s doesn't exist or should not be size 0), "
 		"new version %d\n",
 		bits->remoteUpdate, (long long)file->updateTime, bits->fileSize, file->size,
 		file->sparseFileName, version);
@@ -930,7 +1003,6 @@ static void addElementToDy(struct dyString *dy, char *name)
 /* add one element of a path to a dyString, hashing it if it's longer 
  * than MAXNAMLEN */
 {
-#ifdef USE_SSL
 if (strlen(name) > MAXNAMLEN)
     {
     unsigned char hash[SHA_DIGEST_LENGTH];
@@ -942,7 +1014,6 @@ if (strlen(name) > MAXNAMLEN)
     dyStringAppend(dy, newName);
     }
 else
-#endif
     dyStringAppend(dy, name);
 }
 
@@ -1187,6 +1258,11 @@ if (file != NULL)
            file->ios.sparse.numSeeks, file->ios.sparse.numReads, file->ios.sparse.bytesRead, file->ios.sparse.numWrites,  file->ios.sparse.bytesWritten, 
            file->ios.udc.numSeeks, file->ios.udc.numReads, file->ios.udc.bytesRead, file->ios.udc.numWrites,  file->ios.udc.bytesWritten, 
            file->ios.net.numSeeks, file->ios.net.numReads, file->ios.net.bytesRead, file->ios.net.numWrites,  file->ios.net.bytesWritten);
+        }
+    if (file->mmapBase != NULL)
+        {
+        if (munmap(file->mmapBase, file->size) < 0)
+            errnoAbort("munmap() failed on %s", file->url);
         }
     if (file->connInfo.socket != 0)
 	mustCloseFd(&(file->connInfo.socket));
@@ -1484,8 +1560,12 @@ if (!udcCacheEnabled())
     return TRUE;
 
 boolean ok = TRUE;
-/* We'll break this operation into blocks of a reasonable size to allow
- * other processes to get cache access, since we have to lock the cache files. */
+/* Original comment said:
+ *  "We'll break this operation into blocks of a reasonable size to allow
+ *   other processes to get cache access, since we have to lock the cache files."
+ * However there is no locking done, so this whole splitting might be unnecessary
+ * complexity.
+ */
 bits64 s,e, endPos=offset+size;
 for (s = offset; s < endPos; s = e)
     {
@@ -1923,7 +2003,7 @@ if (udcIsLocal(url))
     return fileSize(url);
 
 // don't go to the network if we can avoid it
-int cacheSize = udcSizeFromCache(url, NULL);
+off_t cacheSize = udcSizeFromCache(url, NULL);
 if (cacheSize!=-1)
     return cacheSize;
 
@@ -1962,3 +2042,32 @@ boolean udcExists(char *url)
 {
 return udcFileSize(url)!=-1;
 }
+
+void udcMMap(struct udcFile *file)
+/* Enable access to underlying file as memory using mmap.  udcMMapFetch
+ * must be called to actually access regions of the file. */
+{
+if (file->mmapBase != NULL)
+    errAbort("File is already mmaped: %s", file->url);
+file->mmapBase = mmap(NULL, file->size, PROT_READ, MAP_SHARED, file->fdSparse, 0);
+if (file->mmapBase == MAP_FAILED)
+    errnoAbort("mmap() failed for %s", file->url);
+}
+
+void *udcMMapFetch(struct udcFile *file, bits64 offset, bits64 size)
+/* Return pointer to a region of the file in memory, ensuring that regions is
+ * cached. udcMMap must have been called to enable access.  This must be
+ * called for first access to a range of the file or erroneous (zeros) data
+ * maybe returned.  Maybe called multiple times on a range or overlapping
+ * returns. */
+{
+if (file->mmapBase == NULL)
+    errAbort("udcMMap() has not been called for: %s", file->url);
+if ((offset + size) > file->size)
+    errAbort("udcMMapFetch on offset %lld for %lld bytes exceeds length of file %lld on %s",
+             offset, size, file->size, file->url);
+if (udcCacheEnabled() && !sameString(file->protocol, "transparent"))
+    udcCachePreload(file, offset, size);
+return ((char*)file->mmapBase) + offset;
+}
+

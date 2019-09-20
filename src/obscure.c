@@ -10,6 +10,7 @@
 #include "hash.h"
 #include "obscure.h"
 #include "linefile.h"
+#include "sqlNum.h"
 
 static int _dotForUserMod = 100; /* How often does dotForUser() output a dot. */
 
@@ -153,16 +154,31 @@ struct hash *hashTwoColumnFile(char *fileName)
 /* Given a two column file (key, value) return a hash. */
 {
 struct lineFile *lf = lineFileOpen(fileName, TRUE);
-char *row[2];
 struct hash *hash = hashNew(16);
-while (lineFileRow(lf, row))
+char *row[3];
+int fields = 0;
+while ((fields = lineFileChop(lf, row)) != 0)
     {
+    lineFileExpectWords(lf, 2, fields);
     char *name = row[0];
     char *value = lmCloneString(hash->lm, row[1]);
     hashAdd(hash, name, value);
     }
 lineFileClose(&lf);
 return hash;
+}
+
+struct slPair *slPairTwoColumnFile(char *fileName)
+/* Read in a two column file into an slPair list */
+{
+char *row[2];
+struct slPair *list = NULL;
+struct lineFile *lf = lineFileOpen(fileName, TRUE);
+while (lineFileRow(lf, row))
+    slPairAdd(&list, row[0], cloneString(row[1]));
+lineFileClose(&lf);
+slReverse(&list);
+return list;
 }
 
 struct slName *readAllLines(char *fileName)
@@ -238,6 +254,23 @@ for (;;)
     }
 freeMem(buf);
 }
+
+void *charToPt(char c)
+/* Convert char to pointer. Use when really want to store
+ * a char in a pointer field. */
+{
+char *pt = NULL;
+return pt+c;
+}
+
+char ptToChar(void *pt)
+/* Convert pointer to char.  Use when really want to store a
+ * pointer in a char. */
+{
+char *a = NULL, *b = pt;
+return b - a;
+}
+
 
 void *intToPt(int i)
 /* Convert integer to pointer. Use when really want to store an
@@ -368,6 +401,27 @@ else
     {
     return nextWord(pLine);
     }
+}
+
+struct slName *slNameListOfUniqueWords(char *text,boolean respectQuotes)
+/* Return list of unique words found by parsing string delimited by whitespace.
+ * If respectQuotes then ["Lucy and Ricky" 'Fred and Ethyl'] will yield 2 slNames no quotes */
+{
+struct slName *list = NULL;
+char *word = NULL;
+while (text != NULL)
+    {
+    if (respectQuotes)
+        word = nextQuotedWord(&text);
+    else
+        word = nextWord(&text);
+    if (word)
+        slNameStore(&list, word);
+    else
+        break;
+    }
+slReverse(&list);
+return list;
 }
 
 void escCopy(char *in, char *out, char toEscape, char escape)
@@ -586,18 +640,16 @@ void sprintWithGreekByte(char *s, int slength, long long size)
 /* Numbers formatted with PB, TB, GB, MB, KB, B */
 {
 char *greek[] = {"B", "KB", "MB", "GB", "TB", "PB"};
+int maxGreek = (sizeof(greek)/sizeof(char*))-1;
 int i = 0;
 long long d = 1;
-while ((size/d) >= 1024)
+while (((size/d) >= 1024) && (i != maxGreek))
     {
     ++i;
     d *= 1024;
     }
 double result = ((double)size)/d;
-if (result < 10)
-    safef(s,slength,"%3.1f %s",((double)size)/d, greek[i]);
-else
-    safef(s,slength,"%3.0f %s",((double)size)/d, greek[i]);
+safef(s, slength, "%3.*f %s", result < 10 ? 1 : 0, ((double)size)/d, greek[i]);
 }
 
 void printWithGreekByte(FILE *f, long long l)
@@ -605,6 +657,30 @@ void printWithGreekByte(FILE *f, long long l)
 {
 char buf[32];
 sprintWithGreekByte(buf, sizeof(buf), l);
+fprintf(f, "%s", buf);
+}
+
+void sprintWithMetricBaseUnit(char *s, int slength, long long size)
+/* Numbers formatted with Pb, Tb, Gb, Mb, kb, bp */
+{
+char *unit[] = {"bp", "kB", "Mb", "Gb", "Tb", "Pb"};
+int maxUnit = (sizeof(unit)/sizeof(char*))-1;
+int i = 0;
+long long d = 1;
+while (((size/d) >= 1000) && (i != maxUnit))
+    {
+    ++i;
+    d *= 1000;
+    }
+double result = ((double)size)/d;
+safef(s, slength, "%3.*f %s", result < 10 ? 1 : 0, ((double)size)/d, unit[i]);
+}
+
+void printWithMetricBaseUnit(FILE *f, long long l)
+/* Print with formatting in megabase, kilobase, etc. */
+{
+char buf[32];
+sprintWithMetricBaseUnit(buf, sizeof(buf), l);
 fprintf(f, "%s", buf);
 }
 
@@ -780,6 +856,35 @@ while ((c = *s) != 0)
     }
 }
 
+long long currentVmPeak()
+/* return value of peak Vm memory usage (if /proc/ business exists) */
+{
+long long vmPeak = 0;
+
+pid_t pid = getpid();
+char temp[256];
+safef(temp, sizeof(temp), "/proc/%d/status", (int) pid);
+struct lineFile *lf = lineFileMayOpen(temp, TRUE);
+if (lf)
+    {
+    char *line;
+    while (lineFileNextReal(lf, &line))
+	{	// typical line: 'VmPeak:     62646196 kB'
+		// seems to always be kB
+	if (stringIn("VmPeak", line))
+	    {
+	    char *words[3];
+	    chopByWhite(line, words, 3);
+	    vmPeak = sqlLongLong(words[1]);	// assume always 2nd word
+	    break;
+	    }
+	}
+    lineFileClose(&lf);
+    }
+
+return vmPeak;
+}
+
 void printVmPeak()
 /* print to stderr peak Vm memory usage (if /proc/ business exists) */
 {
@@ -844,3 +949,45 @@ if (sameStringN(string + wordOffset, word, wordLen) &&
     return TRUE;
 return FALSE;
 }
+
+void ensureNamesCaseUnique(struct slName *fieldList)
+/* Ensure that there would be no name conflicts in fieldList if all fields were lower-cased. */
+{
+struct slName *field;
+struct hash *hash = hashNew(0);
+for (field = fieldList; field != NULL; field = field->next)
+    {
+    char *s = field->name;
+    int len = strlen(s);
+    assert(len<512);  // avoid stack overflow
+    char lower[len+1];
+    strcpy(lower, s);
+    strLower(lower);
+    char *conflict = hashFindVal(hash, lower);
+    if (conflict)
+	 {
+	 if (sameString(conflict,s))
+	     errAbort("Duplicate symbol %s", s);
+	 else
+	     errAbort("Conflict between symbols with different cases: %s vs %s",
+		conflict, s);
+	 }
+    hashAdd(hash, lower, s);
+    }
+hashFree(&hash);
+}
+
+boolean readAndIgnore(char *fileName)
+/* Read a byte from fileName, so its access time is updated. */
+{
+boolean ret = FALSE;
+char buf[256];
+FILE *f = fopen(fileName, "r");
+if ( f && (fread(buf, 1, 1, f) == 1 ) )
+    ret = TRUE;
+if (f)
+    fclose(f);
+return ret;
+}
+
+

@@ -24,6 +24,7 @@
 #include "obscure.h"
 #include "filePath.h"
 #include "net.h"
+#include "htmshell.h"
 #include "htmlPage.h"
 
 
@@ -489,6 +490,19 @@ if (val == NULL)
 return val;
 }
 
+boolean isSelfClosingTag(struct htmlTag *tag)
+/* Return strue if last attributes' name is "/" 
+ * Self-closing tags are used with html5 and SGV */
+{
+struct htmlAttribute *att = tag->attributes;
+if (!att)
+    return FALSE;
+while (att->next) att = att->next;
+if (sameString(att->name,"/"))
+    return TRUE;
+return FALSE;
+}
+
 static struct htmlTag *htmlTagScan(char *html, char *dupe)
 /* Scan HTML for tags and return a list of them. 
  * Html is the text to scan, and dupe is a copy of it
@@ -577,8 +591,6 @@ for (;;)
 		        break;
 		    else if (c == 0)
 		        break;
-		    else if (isspace(c))
-		        break;
 		    e += 1;
 		    }
 		if (c == 0)
@@ -630,9 +642,16 @@ for (;;)
 			    }
 			}
 		    }
+		
 		AllocVar(att);
 		att->name = cloneString(name);
 		att->val = cloneString(val);
+		// The html standard allows us to break quoted attributes into multiple lines using newlines,
+		// but they are not part of the tag value itself, so 
+		// Strip \n and \r chars from value (att->val);  
+		stripChar(att->val, '\n');
+		stripChar(att->val, '\r');
+		attributeDecode(att->val);
 		slAddTail(&tag->attributes, att);
 		s = e;
 		if (gotEnd)
@@ -721,6 +740,7 @@ for (tag = form->startTag->next; tag != form->endTag; tag = tag->next)
 	if (varName == NULL)
 	    {
 	    if (!htmlTagAttributeVal(page, tag, "ONCHANGE", NULL)
+	     && !htmlTagAttributeVal(page, tag, "ID", NULL)
 	        && !sameWord(type, "SUBMIT") && !sameWord(type, "CLEAR")
 	    	&& !sameWord(type, "BUTTON") && !sameWord(type, "RESET")
 		&& !sameWord(type, "IMAGE"))
@@ -736,7 +756,7 @@ for (tag = form->startTag->next; tag != form->endTag; tag = tag->next)
 	var->type = type;
 	if (sameWord(type, "TEXT") || sameWord(type, "PASSWORD") 
 		|| sameWord(type, "FILE") || sameWord(type, "HIDDEN")
-		|| sameWord(type, "IMAGE"))
+		|| sameWord(type, "IMAGE") || sameWord(type, "SEARCH"))
 	    {
 	    var->curVal = cloneString(value);
 	    }
@@ -1458,6 +1478,12 @@ struct slName *htmlPageLinks(struct htmlPage *page)
 return htmlPageScanAttribute(page, NULL, "HREF");
 }
 
+struct slName *htmlPageSrcLinks(struct htmlPage *page)
+/* Scan through tags list and pull out SRC attributes. */
+{
+return htmlPageScanAttribute(page, NULL, "SRC");
+}
+
 struct htmlTableRow
 /* Data on a row */
     {
@@ -1658,13 +1684,47 @@ static char *bodyNesters[] =
     "ADDRESS", "DIV", "H1", "H2", "H3", "H4", "H5", "H6",
     "ACRONYM", "BLOCKQUOTE", "CITE", "CODE", "DEL", "DFN"
     "DIR", "DL", "MENU", "OL", "UL", "CAPTION", "TABLE", 
-    "A", "MAP", "OBJECT", "FORM"
+    "A", "MAP", "OBJECT", "FORM", "DIV", "SCRIPT", "SVG"
 };
 
 static char *headNesters[] =
 /* Nesting tags that appear in header. */
 {
-    "TITLE",
+    "TITLE", "SCRIPT"
+};
+
+static char *singleTons[] =
+/* Tags which do not have closing tags. */
+{
+"AREA",
+"BASE",
+"BR",
+"COL",
+"COMMAND",
+"EMBED",
+"FRAME",  // not in html5
+"HR",
+"IMG",
+"INPUT",
+"LINK",
+"META",
+"PARAM",
+"SOURCE"
+};
+
+static char *selfClosers[] =
+/* Tags which can be optionally self-closing in html5 or SVG.
+ * Note that a space is required BEFORE the /> which provides disambiguation,
+ * e.g. We do not know if the trailing slash is part of SRC URL: <img src=http://domain.com/image.jpg/>
+ */
+{
+"CIRCLE",   // SVG
+"ELLIPSE",  // SVG
+"LINE",     // SVG
+"PATH",     // SVG
+"POLYGON",  // SVG
+"POLYLINE", // SVG
+"RECT"      // SVG
 };
 
 static struct htmlTag *validateBody(struct htmlPage *page, struct htmlTag *startTag)
@@ -1689,11 +1749,13 @@ checkTagIsInside(page, "DIR MENU OL UL", "LI", startTag, endTag);
 checkTagIsInside(page, "DL", "DD DT", startTag, endTag);
 checkTagIsInside(page, "COLGROUP TABLE", "COL", startTag, endTag);
 checkTagIsInside(page, "MAP", "AREA", startTag, endTag);
+#ifdef OLD   /* These days input type controls allowed outside forms because of javascript */
 checkTagIsInside(page, "FORM SCRIPT", 
 	"INPUT BUTTON /BUTTON OPTION SELECT /SELECT TEXTAREA /TEXTAREA"
 	"FIELDSET /FIELDSET"
 	, 
 	startTag, endTag);
+#endif /* OLD */
 validateNestingTags(page, startTag, endTag, bodyNesters, ArraySize(bodyNesters));
 return endTag->next;
 }
@@ -1727,6 +1789,9 @@ okChars['!'] = 1;
 okChars['*'] = 1;
 okChars['@'] = 1;
 okChars['\''] = 1;  // apparently the apostrophe itself is ok
+okChars['|'] = 1;   // apparently the google uses pipe char
+okChars[','] = 1;   // apparently the google uses comma char
+okChars['#'] = 1;  // URI fragment, typically an anchor
 return okChars;
 }
 
@@ -1765,6 +1830,16 @@ for (form = page->forms; form != NULL; form = form->next)
 for (link = linkList; link != NULL; link = link->next)
     validateCgiUrl(link->name);
 slFreeList(&linkList);
+}
+
+static struct htmlTag *nextTagOfTypeInList(struct htmlTag *tagList, char *type)
+/* Return next tag of given type in list or NULL if none. */
+{
+struct htmlTag *tag;
+for (tag = tagList; tag != NULL; tag = tag->next)
+    if (sameString(tag->name, type))
+	return tag;
+return NULL;
 }
 
 static int countTagsOfType(struct htmlTag *tagList, char *type)
@@ -1811,7 +1886,19 @@ if (contentType == NULL || startsWith("text/html", contentType))
     {
     /* To simplify things upper case all tag names. */
     for (tag = page->tags; tag != NULL; tag = tag->next)
+	{
 	touppers(tag->name);
+	if (isEmpty(tag->name)) // causes a blank tag
+	    tagAbort(page, tag, "Space not allowed between opening bracket < and tag name");
+	if (startsWith("/", tag->name))
+	    {
+	    if (sameString(tag->name,"/")) // causes a blank close tag
+		tagAbort(page, tag, "Space not allowed between opening bracket </ and closing tag name");
+	    if (tag->attributes)
+		tagAbort(page, tag, "Attributes are not allowed in closing tag: [%s]", tag->name);
+	    }
+	}
+
 
     checkExactlyOne(page->tags, "BODY");
 
@@ -1820,11 +1907,12 @@ if (contentType == NULL || startsWith("text/html", contentType))
 	errAbort("No tags");
     if (!sameWord(tag->name, "HTML"))
 	errAbort("Doesn't start with <HTML> tag");
-    tag = tag->next;
-    if (tag == NULL || !sameWord(tag->name, "HEAD"))
-	warn("<HEAD> tag does not follow <HTML> tag");
+    struct htmlTag *headTag = nextTagOfTypeInList(tag->next, "HEAD");
+    if (headTag == NULL)
+        warn("No <HEAD> tag after <HTML> tag");
     else
 	{
+	tag = headTag;
 	for (;;)
 	    {
 	    tag = tag->next;
@@ -1840,7 +1928,7 @@ if (contentType == NULL || startsWith("text/html", contentType))
 	validateNestingTags(page, page->tags, tag, headNesters, ArraySize(headNesters));
 	tag = tag->next;
 	}
-    if (tag == NULL || !sameWord(tag->name, "BODY"))
+    if ((tag = nextTagOfTypeInList(tag, "BODY")) == NULL)
 	errAbort("<BODY> tag does not follow <HTML> tag");
     tag = validateBody(page, tag->next);
     if (tag == NULL || !sameWord(tag->name, "/HTML"))
@@ -1849,3 +1937,85 @@ if (contentType == NULL || startsWith("text/html", contentType))
     }
 }
 
+void htmlPageStrictTagNestCheck(struct htmlPage *page)
+/* Do strict tag nesting check.  Aborts if there is a problem. */
+{
+struct htmlTag *tag;
+/* To simplify things upper case all tag names. */
+for (tag = page->tags; tag != NULL; tag = tag->next)
+    touppers(tag->name);
+
+/* Add singleton tags to hash. */
+struct hash *singleTonHash = hashNew(8);
+int i;
+int count=ArraySize(singleTons);
+for (i=0; i<count; ++i)
+    hashAdd(singleTonHash, singleTons[i], NULL);
+
+/* Add selfCloser tags to hash. */
+struct hash *selfCloserHash = hashNew(8);
+count=ArraySize(selfClosers);
+for (i=0; i<count; ++i)
+    hashAdd(selfCloserHash, selfClosers[i], NULL);
+
+boolean inA = FALSE;  // inside A tag. (A tags may not be nested.)
+struct slName *tagStack = NULL;
+for (tag = page->tags; tag != NULL; tag = tag->next)
+    {
+    if (isEmpty(tag->name)) // causes a blank tag
+	tagAbort(page, tag, "Space not allowed between opening bracket < and tag name");
+    if (sameString(tag->name,"A")) // A open tag
+	{
+	if (inA) 
+	    tagAbort(page, tag, "A tags may not be nested inside one another.");
+	else
+	    inA = TRUE;
+	}
+
+    if (startsWith("/", tag->name))
+	{
+	if (sameString(tag->name,"/")) // causes a blank close tag
+	    tagAbort(page, tag, "Space not allowed between opening bracket </ and closing tag name");
+        if (tag->attributes)
+	    tagAbort(page, tag, "Attributes are not allowed in closing tag: [%s]", tag->name);
+	if (sameString(tag->name,"/A")) // A close tag
+	    {
+	    if (inA) 
+		inA = FALSE;
+	    else
+		tagAbort(page, tag, "/A close tag with no open tag.");
+	    }
+	if (hashLookup(singleTonHash, tag->name+1))
+	    tagAbort(page, tag, "Tag %s closing tag not allowed for singleton tags.", tag->name);
+	if (!sameString("P", tag->name+1))
+	    {
+	    if (!tagStack)
+		tagAbort(page, tag, "No tags still left on stack. Closing tag %s has no corresponding open tag.", tag->name);
+	    struct slName *top = slPopHead(&tagStack);
+	    // flush LI tags still on stack when /UL or /OL encountered
+	    // since the missing /LI tags are usually tolerated. 
+	    while ((sameString(tag->name, "/UL") || sameString(tag->name, "/OL")) && sameString(top->name,"LI"))
+		{
+		tagWarn(page, tag, "Closing tag %s found. LI tag on stack. Missing /LI tag. Please fix. Continuing.", tag->name);
+		top = slPopHead(&tagStack);
+		}
+	    if (!sameString(top->name,tag->name+1))
+		{
+		tagAbort(page, tag, "Closing tag %s found, tag %s at top of stack.", tag->name, top->name);
+		}
+	    }
+	}
+    else
+	{
+	if (
+	    ! hashLookup(singleTonHash, tag->name) 
+	 && !(hashLookup(selfCloserHash, tag->name) && isSelfClosingTag(tag))
+         && ! sameString("P", tag->name))
+	    {
+	    slAddHead(&tagStack, slNameNew(tag->name));
+	    }	    
+	}	    
+    }
+if (tagStack)
+    errAbort("Some tags still left on stack. Open tag %s missing its closing tag.", tagStack->name);
+}

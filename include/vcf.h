@@ -176,7 +176,10 @@ switch (type)
 	fprintf(f, "%c", datum.datChar);
 	break;
     case vcfInfoString:
-	fprintf(f, "%s", datum.datString);
+        if (startsWith("http", datum.datString))
+            fprintf(f, "<a target=_blank href='%s'>%s</a>", datum.datString, datum.datString);
+        else
+            fprintf(f, "%s", datum.datString);
 	break;
     default:
 	errAbort("vcfPrintDatum: Unrecognized type %d", type);
@@ -189,6 +192,13 @@ switch (type)
 struct vcfFile *vcfFileNew();
 /* Return a new, empty vcfFile object. */
 
+struct vcfFile *vcfFileFromHeader(char *name, char *headerString, int maxErr);
+/* Parse the VCF header string into a vcfFile object with no rows.
+ * name is for error reporting.
+ * If maxErr is non-negative then continue to parse until maxErr+1 errors have been found.
+ * A maxErr less than zero does not stop and reports all errors.
+ * Set maxErr to VCF_IGNORE_ERRS for silence. */
+
 struct vcfFile *vcfFileMayOpen(char *fileOrUrl, char *chrom, int start, int end,
 			       int maxErr, int maxRecords, boolean parseAll);
 /* Open fileOrUrl and parse VCF header; return NULL if unable.
@@ -199,6 +209,15 @@ struct vcfFile *vcfFileMayOpen(char *fileOrUrl, char *chrom, int start, int end,
  * there are maxErr+1 errors.  A maxErr less than zero does not stop
  * and reports all errors. Set maxErr to VCF_IGNORE_ERRS for silence. */
 
+struct vcfFile *vcfTabixFileAndIndexMayOpen(char *fileOrUrl, char *tbiFileOrUrl, char *chrom, int start, int end,
+				    int maxErr, int maxRecords);
+/* Open a VCF file that has been compressed and indexed by tabix and
+ * parse VCF header, or return NULL if unable. tbiFileOrUrl can be NULL.
+ * If chrom is non-NULL, seek to the position range and parse all lines in
+ * range into vcff->records.  If maxErr >= zero, then continue to parse until
+ * there are maxErr+1 errors.  A maxErr less than zero does not stop
+ * and reports all errors. Set maxErr to VCF_IGNORE_ERRS for silence */
+
 struct vcfFile *vcfTabixFileMayOpen(char *fileOrUrl, char *chrom, int start, int end,
 				    int maxErr, int maxRecords);
 /* Open a VCF file that has been compressed and indexed by tabix and
@@ -207,6 +226,12 @@ struct vcfFile *vcfTabixFileMayOpen(char *fileOrUrl, char *chrom, int start, int
  * vcff->records.  If maxErr >= zero, then continue to parse until
  * there are maxErr+1 errors.  A maxErr less than zero does not stop
  * and reports all errors. Set maxErr to VCF_IGNORE_ERRS for silence. */
+
+long long vcfTabixItemCount(char *fileOrUrl, char *tbiFileOrUrl);
+/* Return the total number of items across all sequences in fileOrUrl, using index file.
+ * If tbiFileOrUrl is NULL, the index file is assumed to be fileOrUrl.tbi.
+ * NOTE: not all tabix index files include mapped item counts, so this may return 0 even for
+ * large files. */
 
 int vcfTabixBatchRead(struct vcfFile *vcff, char *chrom, int start, int end,
                       int maxErr, int maxRecords);
@@ -281,6 +306,9 @@ struct vcfInfoDef *vcfInfoDefForGtKey(struct vcfFile *vcff, const char *key);
 /* Look up the type of genotype FORMAT component key, in the definitions from the header,
  * and failing that, from the keys reserved in the spec. */
 
+const struct vcfInfoElement *vcfGenotypeFindInfo(const struct vcfGenotype *gt, char *key);
+/* Find the genotype infoElement for key, or return NULL. */
+
 char *vcfFilePooledStr(struct vcfFile *vcff, char *str);
 /* Allocate memory for a string from vcff's shared string pool. */
 
@@ -293,5 +321,8 @@ char *vcfGetSlashSepAllelesFromWords(char **words, struct dyString *dy);
 /* Overwrite dy with a /-separated allele string from VCF words,
  * skipping the extra initial base that VCF requires for indel alleles if necessary.
  * Return dy->string for convenience. */
+
+void vcfRecordWriteNoGt(FILE *f, struct vcfRecord *rec);
+/* Write the first 8 columns of VCF rec to f.  Genotype data will be ignored if present. */
 
 #endif // vcf_h
