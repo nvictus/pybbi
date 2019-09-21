@@ -1,7 +1,3 @@
-kentSrc = ..
-include ../inc/localEnvironment.mk
-include ../inc/common.mk
-
 O = aliType.o annoAssembly.o annoFilter.o annoFormatter.o annoFormatTab.o \
     annoGrator.o annoGrateWig.o annoGratorQuery.o annoOption.o annoRow.o annoStreamer.o \
     annoStreamBigBed.o annoStreamBigWig.o annoStreamTab.o annoStreamLongTabix.o annoStreamVcf.o \
@@ -49,18 +45,16 @@ O = aliType.o annoAssembly.o annoFilter.o annoFormatter.o annoFormatTab.o \
     wildcmp.o windowsToAscii.o wormdna.o \
     xAli.o xa.o xap.o xenshow.o xmlEscape.o xp.o zlibFace.o
 
-$(MACHTYPE)/jkweb.a: $(O) $(MACHTYPE)
-	ar rcus $(MACHTYPE)/jkweb.a $(O)
+$(MACHTYPE)/libkent.a: $(O) $(MACHTYPE)
+	ar rcus $(MACHTYPE)/libkent.a $(O)
 
 $(MACHTYPE):
 	mkdir $(MACHTYPE)
 
-test:
-	cd tests && ${MAKE} test
-
 clean:
-	rm -f ${O} $(MACHTYPE)/jkweb.a
-	cd tests && ${MAKE} clean
+	rm -f ${O} $(MACHTYPE)/libkent.a
 
-tags:
-	etags ../inc/*.h ../lib/*.h ../lib/*.c  ../hg/inc/*.h ../hg/lib/*.h ../hg/lib/*.c ../hg/hgTracks/*.c ../hg/hgc/*.c ../hg/hgTrackUi/*.c
+%.o: %.c
+	${CC} ${COPTS} ${CFLAGS} ${DEFS} ${LDFLAGS} ${INC} -o $@ -c $<
+
+all: $(MACHTYPE)/libkent.a

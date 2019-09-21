@@ -1,4 +1,4 @@
-.PHONY: all build clean clean-c clean-pyc clean-cython clean-build build-sdist publish-test publish
+.PHONY: all build clean build-cython clean-cython build-ucsc clean-ucsc test build-sdist publish-test publish
 
 current_dir = $(shell pwd)
 UNAME_S := $(shell uname -s)
@@ -17,8 +17,8 @@ export MACHTYPE
 export CC=gcc
 export COPTS=-g -pthread -fPIC -static
 export CFLAGS=-Wall
-export LDFLAGS=-L${current_dir}/src/${MACHTYPE} -L/usr/lib -lz -lc -lpthread -lssl -lcrypto -lpng
-export INC=-I${current_dir}/include -I/usr/include
+export LDFLAGS=-L${current_dir}/src/${MACHTYPE} -L${current_dir}/htslib -L/usr/lib -lz -lc -lpthread -lssl -lcrypto -lpng -lhts
+export INC=-I${current_dir}/include -I${current_dir}/htslib -I/usr/include
 export DEFS=-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_GNU_SOURCE -DMACHTYPE_${MACHTYPE} -DUSE_SSL
 
 
@@ -82,37 +82,35 @@ ifneq (${COREDUMP},)
 endif
 
 
-all: build-cython
+all: build
 
 src/$(MACHTYPE)/libkent.a:
 	cd src && $(MAKE)
 
-clean-c:
+clean-ucsc:
 	cd src && ${MAKE} clean
 
+build-ucsc: src/$(MACHTYPE)/libkent.a
+
 clean-cython:
-	rm bbi/*.c bbi/*.so
-	rm -rf build
-
-clean-pyc:
-	find . -name '*.pyc' -exec rm --force {} +
-	find . -name '*.pyo' -exec rm --force {} +
-
-clean: clean-pyc clean-cython clean-c
-
-clean-build:
-	rm --force --recursive build/
-	rm --force --recursive dist/
-
-test:
-	pytest
-
-build-c: src/$(MACHTYPE)/libkent.a
+	rm -f bbi/*.c bbi/*.so
+	find . -name '*.pyc' -exec rm --f {} +
+	find . -name '*.pyo' -exec rm --f {} +
 
 build-cython: src/$(MACHTYPE)/libkent.a
 	python setup.py build_ext --inplace
 
-build-sdist: clean-build
+clean: clean-ucsc clean-cython
+	rm -rf build/
+	rm -rf dist/
+
+build: build-ucsc build-cython
+
+
+test:
+	pytest
+
+build-sdist: clean
 	python setup.py sdist
 
 # pip install --index-url https://test.pypi.org/simple/ pybbi

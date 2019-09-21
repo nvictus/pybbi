@@ -462,4 +462,9 @@ bits32 bbiIntervalSlice(struct bbiFile *bbi, bits32 baseStart, bits32 baseEnd,
                         struct bbiInterval *intervalList, struct bbiSummaryElement *el);
 
 
+/* Exposing static functions from bigBed.c */
+struct bbiInterval *bigBedCoverageIntervals(struct bbiFile *bbi,
+    char *chrom, bits32 start, bits32 end, struct lm *lm);
+
+
 #endif /* BBIFILE_H */
