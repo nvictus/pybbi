@@ -17,7 +17,7 @@ export MACHTYPE
 export CC=gcc
 export COPTS=-g -pthread -fPIC -static
 export CFLAGS=-Wall
-export LDFLAGS=-L${current_dir}/src/${MACHTYPE} -L/usr/lib -lz -lc -lpthread -lssl -lcrypto -lpng
+export LDFLAGS=-L${current_dir}/src/${MACHTYPE} -L/usr/lib -lc -lz -lpthread -lssl -lcrypto -lpng
 export INC=-I${current_dir}/include -I/usr/include
 export DEFS=-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_GNU_SOURCE -DMACHTYPE_${MACHTYPE} -DUSE_SSL
 

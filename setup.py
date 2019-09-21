@@ -14,6 +14,50 @@ import io
 
 thisdir = op.dirname(op.realpath(__file__))
 
+# https://solitum.net/openssl-os-x-el-capitan-and-brew/
+INCLUDE_DIRS = [
+    op.join(sys.prefix, 'include'),
+    op.join(sys.prefix, 'include', 'openssl'),
+    '/usr/include',
+    '/usr/include/openssl',
+    '/usr/local/opt/openssl/lib',  # darwin
+]
+INCLUDE_DIRS += glob.glob(op.join(sys.prefix, 'include', 'libpng*'))
+INCLUDE_DIRS += glob.glob('/usr/local/include/libpng*')  # darwin
+
+LIBRARY_DIRS = [
+    op.join(sys.prefix, 'lib'),
+    '/lib',
+    '/usr/lib',
+    '/usr/local/lib'
+    '/usr/local/opt/openssl/lib',  # darwin
+]
+
+
+include_dirs = []
+for inc_dir in INCLUDE_DIRS:
+    if op.isdir(inc_dir):
+        include_dirs.append(inc_dir)
+        break
+pth = os.environ.get("CPATH")
+if pth:
+    include_dirs += pth.split(':')
+os.environ["CPATH"] = ':'.join(include_dirs)
+
+
+library_dirs = []
+for lib_dir in LIBRARY_DIRS:
+    if op.isdir(lib_dir):
+        library_dirs.append(lib_dir)
+        break
+pth = os.environ.get("LIBRARY_PATH")
+if pth:
+    library_dirs += pth.split(':')
+os.environ["LIBRARY_PATH"] = ':'.join(library_dirs)
+
+
+os.environ["LDFLAGS"] = '-Wl,--no-as-needed ' + os.environ.get("LDFLAGS", "")
+
 
 class lazylist(list):
     '''
@@ -55,56 +99,15 @@ def get_version(pkg):
     return version
 
 
-# Paths to propagate to make
-extra_library_dirs = [op.join(sys.prefix, 'lib')]
-extra_include_dirs = [op.join(sys.prefix, 'include')]
-
-
-# OpenSSL
-inc_dirs = [
-    op.join(sys.prefix, 'include', 'openssl'),
-    '/usr/include/openssl',
-]
-for inc_dir in inc_dirs:
-    if op.isdir(inc_dir):
-        extra_include_dirs.append(inc_dir)
-        break
-if sys.platform == "darwin":
-    # https://solitum.net/openssl-os-x-el-capitan-and-brew/
-    lib_dir = '/usr/local/opt/openssl/lib'
-    if op.isdir(lib_dir):
-        extra_library_dirs.append(lib_dir)
-    inc_dir = '/usr/local/opt/openssl/include'
-    if op.isdir(inc_dir):
-        extra_include_dirs.append(inc_dir)
-
-
-# libPNG
-inc_dirs = glob.glob(op.join(sys.prefix, 'include', 'libpng*'))
-for inc_dir in inc_dirs:
-    if op.isdir(inc_dir):
-        extra_include_dirs.append(inc_dir)
-        break
-if sys.platform == "darwin":
-    inc_dirs = glob.glob('/usr/local/include/libpng*')
-    for inc_dir in inc_dirs:
-        if op.isdir(inc_dir):
-            extra_include_dirs.append(inc_dir)
-
-
 class build_ext(_build_ext):
     def run(self):
         os.environ['SETUP_PY'] = '1'
-        for lib_dir in extra_library_dirs[::-1]:
-            os.environ["LIBRARY_PATH"] = \
-                lib_dir + ':' + os.environ.get("LIBRARY_PATH", "")
-        for inc_dir in extra_include_dirs[::-1]:
-            os.environ["C_INCLUDE_PATH"] = \
-                inc_dir + ':' + os.environ.get("C_INCLUDE_PATH", "")
 
         # First, compile our C library: libkent.a
+        import sysconfig
+        log.info(sysconfig.get_config_vars())
+        log.info("CPATH: " + os.environ.get("CPATH", ""))
         log.info("LIBRARY_PATH: " + os.environ.get("LIBRARY_PATH", ""))
-        log.info("C_INCLUDE_PATH: " + os.environ.get("C_INCLUDE_PATH", ""))
         log.info("Compiling libkent archive...")
         check_call(['make', 'build-c'])
 
@@ -123,16 +126,16 @@ def get_ext_modules():
             sources=[
                 op.join(thisdir, 'bbi/cbbi.pyx')
             ],
+            libraries=[
+                'c', 'z', 'pthread', 'ssl', 'crypto', 'png', 'kent'
+            ],
             library_dirs=[
                 op.join(thisdir, 'src/x86_64'),
-            ] + extra_library_dirs,
-            libraries=[
-                'c', 'z', 'pthread', 'ssl', 'crypto', 'kent',
-            ],
+            ] + library_dirs,
             include_dirs=[
                 numpy.get_include(),
                 op.join(thisdir, 'include'),
-            ] + extra_include_dirs,
+            ] + include_dirs,
         ),
     ]
     return cythonize(ext_modules)

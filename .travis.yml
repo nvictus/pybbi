@@ -10,7 +10,8 @@ python:
   - "3.7"
 
 install:
-  - pip install -v -e .
+  - DISTUTILS_DEBUG=1 pip install -v -e .
 
 script:
+  - ldd -r bbi/cbbi*.so
   - pytest
