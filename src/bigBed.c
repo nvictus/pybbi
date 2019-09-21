@@ -20,6 +20,55 @@
 #include "bbiFile.h"
 #include "bigBed.h"
 
+
+char *bedAsDef(int bedFieldCount, int totalFieldCount)
+/* Return an autoSql definition for a bed of given number of fields. 
+ * Normally totalFieldCount is equal to bedFieldCount.  If there are extra
+ * fields they are just given the names field16, field17, etc and type string. */
+{
+if (bedFieldCount < 3 || bedFieldCount > 15)
+    errAbort("bedFieldCount is %d, but must be between %d and %d in bedAsDef", bedFieldCount, 3, 15);
+struct dyString *dy = dyStringNew(0);
+dyStringAppend(dy, 
+    "table bed\n"
+    "\"Browser Extensible Data\"\n"
+    "   (\n"
+    "   string chrom;       \"Reference sequence chromosome or scaffold\"\n"
+    "   uint   chromStart;  \"Start position in chromosome\"\n"
+    "   uint   chromEnd;    \"End position in chromosome\"\n"
+    );
+if (bedFieldCount >= 4)
+    dyStringAppend(dy, "   string name;        \"Name of item.\"\n");
+if (bedFieldCount >= 5)
+    dyStringAppend(dy, "   uint score;          \"Score (0-1000)\"\n");
+if (bedFieldCount >= 6)
+    dyStringAppend(dy, "   char[1] strand;     \"+ or - for strand\"\n");
+if (bedFieldCount >= 7)
+    dyStringAppend(dy, "   uint thickStart;   \"Start of where display should be thick (start codon)\"\n");
+if (bedFieldCount >= 8)
+    dyStringAppend(dy, "   uint thickEnd;     \"End of where display should be thick (stop codon)\"\n");
+if (bedFieldCount >= 9)
+    dyStringAppend(dy, "   uint reserved;     \"Used as itemRgb as of 2004-11-22\"\n");
+if (bedFieldCount >= 10)
+    dyStringAppend(dy, "   int blockCount;    \"Number of blocks\"\n");
+if (bedFieldCount >= 11)
+    dyStringAppend(dy, "   int[blockCount] blockSizes; \"Comma separated list of block sizes\"\n");
+if (bedFieldCount >= 12)
+    dyStringAppend(dy, "   int[blockCount] chromStarts; \"Start positions relative to chromStart\"\n");
+if (bedFieldCount >= 13)
+    dyStringAppend(dy, "   int expCount;	\"Experiment count\"\n");
+if (bedFieldCount >= 14)
+    dyStringAppend(dy, "   int[expCount] expIds;	\"Comma separated list of experiment ids. Always 0,1,2,3....\"\n");
+if (bedFieldCount >= 15)
+    dyStringAppend(dy, "   float[expCount] expScores; \"Comma separated list of experiment scores.\"\n");
+int i;
+for (i=bedFieldCount+1; i<=totalFieldCount; ++i)
+    dyStringPrintf(dy, "lstring field%d;	\"Undocumented field\"\n", i+1);
+dyStringAppend(dy, "   )\n");
+return dyStringCannibalize(&dy);
+}
+
+
 struct bbiFile *bigBedFileOpen(char *fileName)
 /* Open up big bed file. */
 {

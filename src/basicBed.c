@@ -710,57 +710,57 @@ int bedEndThinSize(struct bed *bed)
 return bedBlockSizeInRange(bed, bed->thickEnd, bed->chromEnd);
 }
 
-struct bed *bedFromPsl(struct psl *psl)
-/* Convert a single psl to a bed structure */
-{
-struct bed *bed;
-int i, blockCount, *chromStarts, chromStart;
+// struct bed *bedFromPsl(struct psl *psl)
+// /* Convert a single psl to a bed structure */
+// {
+// struct bed *bed;
+// int i, blockCount, *chromStarts, chromStart;
 
-/* A tiny bit of error checking on the psl. */
-if (psl->qStart >= psl->qEnd || psl->qEnd > psl->qSize 
-    || psl->tStart >= psl->tEnd || psl->tEnd > psl->tSize)
-    {
-    errAbort("mangled psl format for %s", psl->qName);
-    }
+// /* A tiny bit of error checking on the psl. */
+// if (psl->qStart >= psl->qEnd || psl->qEnd > psl->qSize 
+//     || psl->tStart >= psl->tEnd || psl->tEnd > psl->tSize)
+//     {
+//     errAbort("mangled psl format for %s", psl->qName);
+//     }
 
-/* Allocate bed and fill in from psl. */
-AllocVar(bed);
-bed->chrom = cloneString(psl->tName);
-bed->chromStart = bed->thickStart = chromStart = psl->tStart;
-bed->chromEnd = bed->thickEnd = psl->tEnd;
-bed->score = 1000 - 2*pslCalcMilliBad(psl, TRUE);
-if (bed->score < 0) bed->score = 0;
-bed->strand[0] = psl->strand[0];
-bed->blockCount = blockCount = psl->blockCount;
-bed->blockSizes = (int *)cloneMem(psl->blockSizes,(sizeof(int)*psl->blockCount));
-if (pslIsProtein(psl))
-    {
-    /* Convert blockSizes from protein to dna. */
-    for (i=0; i<blockCount; ++i)
-	bed->blockSizes[i] *= 3;
-    }
-bed->chromStarts = chromStarts = (int *)cloneMem(psl->tStarts, (sizeof(int)*psl->blockCount));
-bed->name = cloneString(psl->qName);
+// /* Allocate bed and fill in from psl. */
+// AllocVar(bed);
+// bed->chrom = cloneString(psl->tName);
+// bed->chromStart = bed->thickStart = chromStart = psl->tStart;
+// bed->chromEnd = bed->thickEnd = psl->tEnd;
+// bed->score = 1000 - 2*pslCalcMilliBad(psl, TRUE);
+// if (bed->score < 0) bed->score = 0;
+// bed->strand[0] = psl->strand[0];
+// bed->blockCount = blockCount = psl->blockCount;
+// bed->blockSizes = (int *)cloneMem(psl->blockSizes,(sizeof(int)*psl->blockCount));
+// if (pslIsProtein(psl))
+//     {
+//     /* Convert blockSizes from protein to dna. */
+//     for (i=0; i<blockCount; ++i)
+// 	bed->blockSizes[i] *= 3;
+//     }
+// bed->chromStarts = chromStarts = (int *)cloneMem(psl->tStarts, (sizeof(int)*psl->blockCount));
+// bed->name = cloneString(psl->qName);
 
-/* Switch minus target strand to plus strand. */
-if (psl->strand[1] == '-')
-    {
-    int chromSize = psl->tSize;
-    reverseInts(bed->blockSizes, blockCount);
-    reverseInts(chromStarts, blockCount);
-    for (i=0; i<blockCount; ++i)
-	chromStarts[i] = chromSize - chromStarts[i] - bed->blockSizes[i];
-    if (bed->strand[0] == '-')
-	bed->strand[0] = '+';
-    else
-	bed->strand[0] = '-';
-    }
+// /* Switch minus target strand to plus strand. */
+// if (psl->strand[1] == '-')
+//     {
+//     int chromSize = psl->tSize;
+//     reverseInts(bed->blockSizes, blockCount);
+//     reverseInts(chromStarts, blockCount);
+//     for (i=0; i<blockCount; ++i)
+// 	chromStarts[i] = chromSize - chromStarts[i] - bed->blockSizes[i];
+//     if (bed->strand[0] == '-')
+// 	bed->strand[0] = '+';
+//     else
+// 	bed->strand[0] = '-';
+//     }
 
-/* Convert coordinates to relative. */
-for (i=0; i<blockCount; ++i)
-    chromStarts[i] -= chromStart;
-return bed;
-}
+// /* Convert coordinates to relative. */
+// for (i=0; i<blockCount; ++i)
+//     chromStarts[i] -= chromStart;
+// return bed;
+// }
 
 void makeItBed12(struct bed *bedList, int numFields)
 /* If it's less than bed 12, make it bed 12. The numFields */
@@ -1025,15 +1025,15 @@ lineFileClose(&lf);
 return hash;
 }
 
-void bedOutputRgb(FILE *f, unsigned int color)
-/*      Output a string: "r,g,b" for 24 bit number */
-{
-int colorIx = (int)color;
-struct rgbColor rgb = colorIxToRgb(colorIx);
-//fprintf(f, "%d,%d,%d", rgb.r, rgb.g, rgb.b);
-// FIXME: endian issue ??
-fprintf(f, "%d,%d,%d", rgb.b, rgb.g, rgb.r);
-}
+// void bedOutputRgb(FILE *f, unsigned int color)
+// /*      Output a string: "r,g,b" for 24 bit number */
+// {
+// int colorIx = (int)color;
+// struct rgbColor rgb = colorIxToRgb(colorIx);
+// //fprintf(f, "%d,%d,%d", rgb.r, rgb.g, rgb.b);
+// // FIXME: endian issue ??
+// fprintf(f, "%d,%d,%d", rgb.b, rgb.g, rgb.r);
+// }
 
 int bedParseRgb(char *itemRgb)
 /*      parse a string: "r,g,b" into three unsigned char values
