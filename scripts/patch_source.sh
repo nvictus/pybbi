@@ -16,6 +16,7 @@ tar -xzvf "v${VERSION}.tar.gz" ${HTS_DIR} --strip-components=2
 
 patch src/bbiRead.c < bbiRead.c.diff
 patch src/bigBed.c < bigBed.c.diff
+patch src/udc.c < redirect_status_codes.diff
 patch src/makefile < makefile.diff
 patch htslib/Makefile < htslib_makefile.diff
 patch include/bbiFile.h < bbiFile.h.diff
