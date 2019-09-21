@@ -106,7 +106,7 @@ class build_ext(_build_ext):
         log.info("LIBRARY_PATH: " + os.environ.get("LIBRARY_PATH", ""))
         log.info("C_INCLUDE_PATH: " + os.environ.get("C_INCLUDE_PATH", ""))
         log.info("Compiling libkent archive...")
-        check_call(['make', 'build-c'])
+        check_call(['make', 'build-ucsc'])
 
         # Now, proceed to build extension modules
         log.info("Building extension module...")
@@ -125,13 +125,15 @@ def get_ext_modules():
             ],
             library_dirs=[
                 op.join(thisdir, 'src/x86_64'),
+                op.join(thisdir, 'htslib'),
             ] + extra_library_dirs,
             libraries=[
-                'c', 'z', 'pthread', 'ssl', 'crypto', 'kent',
+                'c', 'z', 'pthread', 'ssl', 'crypto', 'kent', 'hts',
             ],
             include_dirs=[
                 numpy.get_include(),
                 op.join(thisdir, 'include'),
+                op.join(thisdir, 'htslib'),
             ] + extra_include_dirs,
         ),
     ]
