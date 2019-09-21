@@ -1,4 +1,4 @@
-.PHONY: all build clean build-cython clean-cython build-ucsc clean-ucsc test build-sdist publish-test publish
+.PHONY: all build clean build-cython clean-cython build-ucsc clean-ucsc build-htslib clean-htslib test build-sdist publish-test publish
 
 current_dir = $(shell pwd)
 UNAME_S := $(shell uname -s)
@@ -87,10 +87,19 @@ all: build
 src/$(MACHTYPE)/libkent.a:
 	cd src && $(MAKE)
 
+
+clean-htslib:
+	cd htslib && ${MAKE} clean
+
+build-htslib:
+	cd htslib && ${MAKE} lib-static
+
+
 clean-ucsc:
 	cd src && ${MAKE} clean
 
 build-ucsc: src/$(MACHTYPE)/libkent.a
+
 
 clean-cython:
 	rm -f bbi/*.c bbi/*.so
@@ -100,11 +109,12 @@ clean-cython:
 build-cython: src/$(MACHTYPE)/libkent.a
 	python setup.py build_ext --inplace
 
-clean: clean-ucsc clean-cython
+
+clean: clean-htslib clean-ucsc clean-cython
 	rm -rf build/
 	rm -rf dist/
 
-build: build-ucsc build-cython
+build: build-htslib build-ucsc build-cython
 
 
 test:

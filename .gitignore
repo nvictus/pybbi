@@ -12,4 +12,6 @@ bbi/*.c
 build/
 dist/
 tmp/
+
 scripts/*.tar.gz
+htslib/version.h
