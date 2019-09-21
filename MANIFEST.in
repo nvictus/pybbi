@@ -2,6 +2,7 @@ include LICENSE
 include README.md
 include Makefile
 graft tests
+graft htslib
 graft include
 graft src
 
