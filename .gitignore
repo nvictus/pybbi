@@ -12,3 +12,4 @@ bbi/*.c
 build/
 dist/
 tmp/
+scripts/*.tar.gz

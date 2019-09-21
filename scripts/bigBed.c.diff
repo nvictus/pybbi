@@ -1,0 +1,11 @@
+--- bigBed.c	2019-09-02 13:11:48.000000000 -0400
++++ bigBed.c.patched	2019-09-20 19:58:54.783543631 -0400
+@@ -152,7 +152,7 @@
+ return fieldCount;
+ }
+ 
+-static struct bbiInterval *bigBedCoverageIntervals(struct bbiFile *bbi,
++struct bbiInterval *bigBedCoverageIntervals(struct bbiFile *bbi,
+ 	char *chrom, bits32 start, bits32 end, struct lm *lm)
+ /* Return intervals where the val is the depth of coverage. */
+ {
