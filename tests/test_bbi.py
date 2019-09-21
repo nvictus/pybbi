@@ -2,6 +2,7 @@
 from __future__ import division, print_function
 import os.path as op
 import numpy as np
+import requests
 
 import bbi
 import pytest
@@ -125,8 +126,17 @@ def test_fetch_summary_stats(path):
         bbi.fetch(path, 'chr21', 20000000, 20001000, bins=10, summary='foo')
 
 
-@pytest.mark.xfail
-def test_aws_403_redirect():
-    # See https://stat.ethz.ch/pipermail/bioc-devel/2016-May/009241.html
+def test_follows_all_redirect_codes_and_bypasses_head403():
+    # Upstream kent source doesn't check for redirect status codes 307 and 308
+    # So this would fail had we not patched it
     url = 'https://www.encodeproject.org/files/ENCFF620UMO/@@download/ENCFF620UMO.bigWig'
     bbi.fetch(url, 'chr21', 0, 1000)
+
+
+def test_manual_redirect():
+    # For some reason, HIPPAA-compliant signed AmazonS3 URLs generate 403 when
+    # following redirects via HEAD (but not via GET)
+    # See https://stat.ethz.ch/pipermail/bioc-devel/2016-May/009241.html
+    url = 'https://www.encodeproject.org/files/ENCFF620UMO/@@download/ENCFF620UMO.bigWig'
+    r = requests.head(url, allow_redirects=True)
+    assert r.status_code == 403

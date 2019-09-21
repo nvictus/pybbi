@@ -32,6 +32,16 @@ def _is_url(str uri):
     return urlparse(uri).scheme != ""
 
 
+def _ucsc_can_open_url(str url):
+    cdef bytes bUrl = url.encode('utf-8')
+    f = udcFileMayOpen(bUrl, udcDefaultDir())
+    if f == NULL:
+        return False
+    else:
+        udcFileClose(&f)
+        return True
+
+
 def _read_magic(str uri):
     cdef bytes magic_bytes
     if not _is_url(uri):
@@ -45,7 +55,7 @@ def _read_magic(str uri):
             if code >= 400:
                 raise OSError("Status {}: Couldn't open {}".format(code, uri))
             magic_bytes = r.read(4)
-        if not _ucsc_may_open_url(uri):
+        if not _ucsc_can_open_url(uri):
             raise RuntimeError("UCSC lib cannot open this URL")
     return magic_bytes
 
@@ -60,16 +70,6 @@ def _check_sig(str uri):
         return bigBedSig
     else:
         return 0
-
-
-def _ucsc_may_open_url(str url):
-    cdef bytes bUrl = url.encode('utf-8')
-    f = udcFileMayOpen(bUrl, udcDefaultDir())
-    if f == NULL:
-        return False
-    else:
-        udcFileClose(&f)
-        return True
 
 
 cpdef dict BBI_SUMMARY_TYPES = {
