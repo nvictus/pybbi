@@ -7,13 +7,13 @@ matrix:
         - docker
       env: 
         - PIP=pip
-        - CIBW_SKIP='cp27-*'
+        - CIBW_SKIP='cp27-* cp34-*'
         - CIBW_BEFORE_BUILD="yum install -y gcc make zlib-devel openssl-devel libpng-devel"
     - os: osx
       language: generic
       env: 
         - PIP=pip2
-        - CIBW_SKIP='cp27-*'
+        - CIBW_SKIP='cp27-* cp34-*'
 
 env:
   global:
