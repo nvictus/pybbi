@@ -1,4 +1,15 @@
 language: python
+notifications:
+  email: false
+
+env:
+  global:
+    - CIBW_BUILD_VERBOSITY=3
+    - CIBW_TEST_REQUIRES=""
+    - CIBW_TEST_COMMAND='python -c "import bbi"'
+    - CIBW_SKIP='cp27* cp34* cp35* *manylinux1_i686'
+    - TWINE_USERNAME=nvictus
+    # Note: TWINE_PASSWORD is set in Travis settings
 
 matrix:
   include:
@@ -6,27 +17,22 @@ matrix:
       services:
         - docker
       env: 
+        - CIBW_MANYLINUX1_X86_64_IMAGE="quay.io/pypa/manylinux2010_x86_64"
+        - CIBW_BEFORE_BUILD='yum install -y gcc make zlib-devel openssl-devel libpng-devel && pip install numpy cython  && python -c "import sysconfig; print(sysconfig.get_config_vars())"'
         - PIP=pip
-        - CIBW_SKIP='cp27-* cp34-*'
-        - CIBW_BEFORE_BUILD="yum install -y gcc make zlib-devel openssl-devel libpng-devel"
     - os: osx
       language: generic
       env: 
+        - CPATH="/usr/local/include/libpng:/usr/local/opt/openssl/include:$CPATH"
+        - CIBW_BEFORE_BUILD='pip install numpy cython && python -c "import sysconfig; print(sysconfig.get_config_vars())"'
         - PIP=pip2
-        - CIBW_SKIP='cp27-* cp34-*'
-
-env:
-  global:
-    - CIBW_TEST_REQUIRES=pytest
-    - CIBW_TEST_COMMAND="pytest"
-    - TWINE_USERNAME=nvictus
-    # Note: TWINE_PASSWORD is set in Travis settings
 
 script:
   - $PIP install cibuildwheel
   - cibuildwheel --output-dir wheelhouse
-  - |
-    if [[ $TRAVIS_TAG ]]; then
-      python -m pip install twine
-      python -m twine upload --repository-url https://test.pypi.org/legacy/ wheelhouse/*.whl
-    fi
+  - ls -asl wheelhouse/
+  # - |
+  #   if [[ $TRAVIS_TAG ]]; then
+  #     python -m pip install twine
+  #     python -m twine upload --repository-url https://test.pypi.org/legacy/ wheelhouse/*.whl
+  #   fi
