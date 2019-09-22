@@ -5,10 +5,15 @@ matrix:
     - sudo: required
       services:
         - docker
-      env: PIP=pip
+      env: 
+        - PIP=pip
+        - CIBW_SKIP='cp27-*'
+        - CIBW_BEFORE_BUILD="yum install -y gcc make zlib-devel openssl-devel libpng-devel"
     - os: osx
       language: generic
-      env: PIP=pip2
+      env: 
+        - PIP=pip2
+        - CIBW_SKIP='cp27-*'
 
 env:
   global:
