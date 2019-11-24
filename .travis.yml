@@ -42,7 +42,7 @@ matrix:
 # The last 2 vars are set to assure Python 3 is used on OS X (mac)
 env:
   global:
-    - CIBW_SKIP="cp27-* cp33-* cp34-*
+    - CIBW_SKIP="cp27-* cp33-* cp34-* cp38-*"
     - CIBW_BUILD_VERBOSITY=3
     - CIBW_TEST_REQUIRES=""
     - CIBW_TEST_COMMAND='python -c "import bbi"'
