@@ -12,7 +12,7 @@ from .cbbi import (
     fetch_intervals,
 )
 
-__all__ = ['is_bbi', 'is_bigwig', 'is_bigbed', 'info', 'zooms', 'chromsizes', 
+__all__ = ['is_bbi', 'is_bigwig', 'is_bigbed', 'info', 'zooms', 'chromsizes',
            'fetch', 'stackup', 'fetch_intervals']
 
-__version__ = '0.2.1-dev'
+__version__ = '0.2.1-dev1'
