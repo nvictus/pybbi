@@ -44,6 +44,9 @@ for (( i=0; i<$len; i++ )); do
     $PIP install numpy cython
     $PIP install -v -e .
 
+    # Quick test
+    $PYTHON -c "import bbi"
+
     # Build the wheel
     $PIP wheel -v -w /tmp/located --no-deps .
 

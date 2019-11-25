@@ -26,6 +26,9 @@ for PY_VERSION in $PY_VERSIONS; do
     # Build the package in-place
     $PIP install numpy cython
     $PIP install -v -e .
+
+    # Quick test
+    $PYTHON -c "import bbi"
     
     # Build the wheel
     $PIP wheel -v -w /tmp/located --no-deps .
