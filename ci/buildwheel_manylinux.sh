@@ -4,7 +4,7 @@ set -o xtrace
 
 mkdir -p /tmp/located
 mkdir -p /tmp/delocated
-mkdir /wheelhouse
+mkdir -p /tmp/wheelhouse
 
 # install system dependencies
 yum install -y gcc make zlib-devel openssl-devel libpng-devel
@@ -36,5 +36,5 @@ for PY_VERSION in $PY_VERSIONS; do
     
     # Move it to output
     repaired_wheels=(/tmp/delocated/*.whl)
-    mv ${repaired_wheels[@]} /wheelhouse
+    mv ${repaired_wheels[@]} /tmp/wheelhouse
 done

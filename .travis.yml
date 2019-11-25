@@ -17,7 +17,7 @@ script:
       docker create --name cibw -i quay.io/pypa/manylinux2010_x86_64;
       docker cp $(pwd) cibw:/project;
       docker start -i -a cibw < ci/buildwheel_manylinux.sh;
-      docker cp cibw:/wheelhouse/. wheels;
+      docker cp cibw:/tmp/wheelhouse/. wheels;
     fi
   - if [ "$TRAVIS_OS_NAME" = "osx" ]; then 
       bash ci/buildwheel_macosx.sh;
