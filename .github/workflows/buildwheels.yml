@@ -23,7 +23,7 @@ jobs:
 
   buildwheel-macos:
     name: Build wheels for MacOS
-    runs-on: macos
+    runs-on: macOS-latest
     steps:
       - uses: actions/checkout@v1
       - run: mkdir wheels

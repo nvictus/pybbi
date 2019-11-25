@@ -6,12 +6,11 @@ mkdir -p /tmp/located
 mkdir -p /tmp/delocated
 mkdir -p /tmp/wheelhouse
 
-brew install pkg-config gcc@9 openssl libpng
+brew install pkg-config openssl libpng
 
 curl -L -o /tmp/get-pip.py https://bootstrap.pypa.io/get-pip.py
 
 export C_INCLUDE_PATH="/usr/local/include/libpng:/usr/local/opt/openssl/include:$C_INCLUDE_PATH"
-export CC=gcc-9
 
 PY_VERSIONS=("3.6" "3.7" "3.8")
 PKG_URLS=(
@@ -30,7 +29,7 @@ for (( i=0; i<$len; i++ )); do
     
     # Install python
     curl -L -o /tmp/Python.pkg $PKG_URL
-    sudo installer -verbose -pkg /tmp/Python.pkg -target /
+    sudo installer -pkg /tmp/Python.pkg -target /
 
     # Install pip
     PYTHON=$PY_BIN/python3
