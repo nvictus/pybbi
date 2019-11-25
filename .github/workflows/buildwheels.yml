@@ -1,0 +1,34 @@
+name: Make some wheelz
+
+on:
+  push:
+    branches: [build-wheels]
+
+jobs:
+  buildwheel-manylinux:
+    name: Build wheels for Linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - run: mkdir wheels
+      - run: |
+          docker create --name cibw -i quay.io/pypa/manylinux2010_x86_64;
+          docker cp $(pwd) cibw:/project;
+          docker start -i -a cibw < ci/buildwheel_manylinux.sh;
+          docker cp cibw:/tmp/wheelhouse/. wheels;
+      - uses: actions/upload-artifact@v1
+        with:
+          name: manylinux-wheels
+          path: wheels
+
+  buildwheel-macos:
+    name: Build wheels for MacOS
+    runs-on: macos
+    steps:
+      - uses: actions/checkout@v1
+      - run: mkdir wheels
+      - run: bash ci/buildwheel_macos.sh; mv /tmp/wheelhouse/*.whl wheels;
+      - uses: actions/upload-artifact@v1
+        with:
+          name: macos-wheels
+          path: wheels

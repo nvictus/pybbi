@@ -14,7 +14,7 @@ ifneq (,$(findstring -,$(MACHTYPE)))
 endif
 export MACHTYPE
 
-export CC=gcc
+export CC ?= gcc
 export COPTS=-g -pthread -fPIC -static
 export CFLAGS=-Wall $(shell pkg-config --static --cflags-only-other openssl zlib libpng)
 export LDFLAGS=-L${current_dir}/src/${MACHTYPE} $(shell pkg-config --static --libs openssl zlib libpng)
