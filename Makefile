@@ -1,4 +1,4 @@
-.PHONY: all build clean clean-c clean-pyc clean-cython clean-build build-sdist publish-test publish
+.PHONY: all build clean build-cython clean-cython build-ucsc clean-ucsc sdist publish-test publish
 
 current_dir = $(shell pwd)
 UNAME_S := $(shell uname -s)
@@ -14,110 +14,52 @@ ifneq (,$(findstring -,$(MACHTYPE)))
 endif
 export MACHTYPE
 
-export CC=gcc
+export CC ?= gcc
 export COPTS=-g -pthread -fPIC -static
-export CFLAGS=-Wall
-export LDFLAGS=-L${current_dir}/src/${MACHTYPE} -L/usr/lib -lc -lz -lpthread -lssl -lcrypto -lpng
-export INC=-I${current_dir}/include -I/usr/include
+export CFLAGS=-Wall $(shell pkg-config --static --cflags-only-other openssl zlib libpng)
+export LDFLAGS=-L${current_dir}/src/${MACHTYPE} $(shell pkg-config --static --libs openssl zlib libpng)
+export INC=-I${current_dir}/include $(shell pkg-config --static --cflags-only-I openssl zlib libpng)
 export DEFS=-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_GNU_SOURCE -DMACHTYPE_${MACHTYPE} -DUSE_SSL
-
-
-ifeq (${SETUP_PY},)
-	# find openssl
-	SSLFLAGS=
-	SLLINCL=
-	ifeq (${SSLDIR},)
-		SSLDIR=/usr/include/openssl
-	endif
-	ifneq (${SSLDIR}, "/usr/include/openssl")
-		ifneq ($(UNAME_S),Darwin)
-			SSLFLAGS=-L${SSLDIR}/lib
-		endif
-		SSLINCL=-I${SSLDIR}/include
-	endif
-	LDFLAGS+=${SSLFLAGS}
-	INC+=${SSLINCL}
-
-	# find libpng
-	ifeq (${PNGLIB},)
-		ifneq ($(wildcard /usr/lib64/libpng.a),)
-		  PNGLIB=-L/usr/lib64/libpng.a
-		endif
-	endif
-	ifeq (${PNGLIB},)
-		ifneq ($(wildcard /usr/lib/libpng.a),)
-		  PNGLIB=-L/usr/lib/libpng.a
-		endif
-	endif
-	ifeq (${PNGLIB},)
-		ifneq ($(wildcard /opt/local/lib/libpng.a),)
-		  PNGLIB=-L/opt/local/lib/libpng.a
-		endif
-	endif
-	ifeq (${PNGLIB},)
-		ifneq ($(wildcard /usr/local/lib/libpng.a),)
-		  PNGLIB=-L/usr/local/lib/libpng.a
-		endif
-	endif
-	ifeq (${PNGLIB},)
-		PNGLIB := $(shell libpng-config --ldflags  || true)
-	endif
-	ifeq (${PNGLIB},)
-		PNGLIB=-lpng
-	endif
-	ifeq (${PNGINCL},)
-		ifneq ($(wildcard /opt/local/include/png.h),)
-		  PNGINCL=-I/opt/local/include
-		else
-		  PNGINCL := $(shell libpng-config --I_opts  || true)
-		endif
-	endif
-	LDFLAGS+=${PNGLIB}
-	INC+=${PNGINCL}
-endif
-
 # pass through COREDUMP
 ifneq (${COREDUMP},)
 	DEFS+=-DCOREDUMP
 endif
 
 
-all: build-cython
+all: build
 
 src/$(MACHTYPE)/libkent.a:
 	cd src && $(MAKE)
 
-clean-c:
+
+clean-ucsc:
 	cd src && ${MAKE} clean
 
+build-ucsc: src/$(MACHTYPE)/libkent.a
+
+
 clean-cython:
-	rm bbi/*.c bbi/*.so
-	rm -rf build
-
-clean-pyc:
-	find . -name '*.pyc' -exec rm --force {} +
-	find . -name '*.pyo' -exec rm --force {} +
-
-clean: clean-pyc clean-cython clean-c
-
-clean-build:
-	rm --force --recursive build/
-	rm --force --recursive dist/
-
-test:
-	pytest
-
-build-c: src/$(MACHTYPE)/libkent.a
+	rm -f bbi/*.c bbi/*.so
+	find . -name '*.pyc' -exec rm --f {} +
+	find . -name '*.pyo' -exec rm --f {} +
 
 build-cython: src/$(MACHTYPE)/libkent.a
 	python setup.py build_ext --inplace
 
-build-sdist: clean-build
+
+clean: clean-ucsc clean-cython
+	rm -rf build/
+	rm -rf dist/
+
+build: build-ucsc build-cython
+
+
+sdist: clean
 	python setup.py sdist
 
 # pip install --index-url https://test.pypi.org/simple/ pybbi
-publish-test: build-sdist
+publish-test: sdist
 	twine upload --repository-url https://test.pypi.org/legacy/ dist/*
 
-publish: build-sdist
+publish: sdist
 	twine upload dist/*

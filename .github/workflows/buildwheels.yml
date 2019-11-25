@@ -6,7 +6,7 @@ on:
 
 jobs:
   buildwheel-manylinux:
-    name: buildwheel manylinux
+    name: Build wheels for Linux
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v1
@@ -15,20 +15,20 @@ jobs:
           docker create --name cibw -i quay.io/pypa/manylinux2010_x86_64;
           docker cp $(pwd) cibw:/project;
           docker start -i -a cibw < ci/buildwheel_manylinux.sh;
-          docker cp cibw:/wheelhouse/. wheels;
+          docker cp cibw:/tmp/wheelhouse/. wheels;
       - uses: actions/upload-artifact@v1
         with:
           name: manylinux-wheels
           path: wheels
 
-  buildwheel-macosx:
-    name: buildwheel on Mac OSX
-    runs-on: macos
+  buildwheel-macos:
+    name: Build wheels for MacOS
+    runs-on: macOS-latest
     steps:
       - uses: actions/checkout@v1
       - run: mkdir wheels
-      - run: bash ci/buildwheel_macosx.sh; mv /tmp/wheelhouse/*.whl wheels;
+      - run: bash ci/buildwheel_macos.sh; mv /tmp/wheelhouse/*.whl wheels;
       - uses: actions/upload-artifact@v1
         with:
-          name: macosx-wheels
+          name: macos-wheels
           path: wheels
