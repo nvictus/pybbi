@@ -45,8 +45,8 @@ def _read_magic(str uri):
             if code >= 400:
                 raise OSError("Status {}: Couldn't open {}".format(code, uri))
             magic_bytes = r.read(4)
-        if not _ucsc_may_open_url(uri):
-            raise RuntimeError("UCSC lib cannot open this URL")
+        # if not _ucsc_may_open_url(uri):
+        #     raise RuntimeError("UCSC lib cannot open this URL")
     return magic_bytes
 
 

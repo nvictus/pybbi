@@ -5,7 +5,6 @@ from setuptools.command.build_ext import build_ext as _build_ext
 from subprocess import check_call
 from distutils import log
 import os.path as op
-import glob
 import sys
 import os
 import re

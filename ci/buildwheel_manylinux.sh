@@ -1,4 +1,5 @@
 #!/bin/bash
+# This bash script is based on https://github.com/joerick/cibuildwheel
 set -o errexit
 set -o xtrace
 

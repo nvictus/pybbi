@@ -1,0 +1,14 @@
+--- src/https.c
++++ https.c.patched
+@@ -350,9 +350,8 @@ while (1)
+ 		int saveErrno = errno;
+ 		if ((bwtx == -1) && (saveErrno == EPIPE))
+ 		    { // if there was a EPIPE, accept and consume the SIGPIPE now.
+-		    int sig_caught;
+-		    sigwait(&sigpipe_mask, &sig_caught);
+-		    if (sig_caught > 0) 
++		    struct timespec zerotime = {0};
++		    if (sigtimedwait(&sigpipe_mask, 0, &zerotime) == -1) 
+ 			{
+ 			perror("sigtimedwait");
+ 			exit(1);
