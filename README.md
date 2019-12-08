@@ -7,7 +7,7 @@ This provides read-level access to local and remote bigWig and bigBed files but 
 
 ## Installation ##
 
-Wheels for `pybbi` are available on PyPI for Pythons 2.7, 3.6, 3.7, 3.8 on Linux and Mac OSX.
+Wheels for `pybbi` are available on PyPI for Pythons 3.5, 3.6, 3.7, 3.8 on Linux and Mac OSX.
 
 ```
 $ pip install pybbi
