@@ -4,6 +4,15 @@ Python interface to Jim Kent's big binary file (bbi) \[[1](#ref1)\] library from
 
 This provides read-level access to local and remote bigWig and bigBed files but no write capabilitites. The main feature is fast retrieval of range queries into numpy arrays.
 
+
+## Installation ##
+
+Wheels for `pybbi` are available on PyPI for Pythons 2.7, 3.6, 3.7, 3.8 on Linux and Mac OSX.
+
+```
+$ pip install pybbi
+```
+
 ## API ##
 
 ### Introspection
@@ -39,35 +48,7 @@ Accepts either a bigWig or bigBed file path / URL.
 
 - `bbi.fetch_intervals(path, chrom, start, end)` --> iterator
 
-
 See the docstrings for complete documentation.
-
-
-## Installation ##
-
-Requires
-- Linux/MacOS
-- C compiler, zlib, pthreads, libpng, openssl, make
-- Python 2.7/3.4+
-- `numpy` and `cython`
-
-On fresh Ubuntu instance, you'll need `build-essential`, `make`, `zlib1g-dev`, `libssl-dev`, `libpng16-dev`. It seems to work on the Windows Subsystem for Linux too.
-
-On a Centos/RedHat (rpm) system you'll need `gcc`, `make`, `zlib-devel`, `openssl-devel`, `libpng-devel`.
-
-`pybbi` is now on PyPI as a source distribution. It ships with (slightly modified) kent utils source, which it will compile before building the extension module.
-
-```
-$ pip install pybbi
-```
-
-For development, clone the repo and install in editable mode:
-
-```
-$ git clone https://github.com/nvictus/pybbi.git
-$ cd pybbi
-$ pip install -e .
-```
 
 ## Related projects ##
 
@@ -82,7 +63,29 @@ This library provides bindings to the reference UCSC bbi library code. Check out
 
 <a id="ref1">[1]</a>: http://bioinformatics.oxfordjournals.org/content/26/17/2204.full
 
-## Troubleshooting ##
+## From source ##
+
+If wheels for your platform or Python version aren't available or you want to develop, you'll need to install `pybbi` from source. The source distribution on PyPI ships with (slightly modified) kent utils source, which will compile before the extension module is built.
+
+Requires
+- Linux/MacOS
+- C compiler, zlib, pthreads, libpng, openssl, make
+- Python 2.7/3.4+
+- `numpy` and `cython`
+
+On fresh Ubuntu instance, you'll need `build-essential`, `make`, `zlib1g-dev`, `libssl-dev`, `libpng16-dev`. It seems to work on the Windows Subsystem for Linux too.
+
+On a Centos/RedHat (rpm) system you'll need `gcc`, `make`, `zlib-devel`, `openssl-devel`, `libpng-devel`.
+
+For development, clone the repo and install in editable mode:
+
+```
+$ git clone https://github.com/nvictus/pybbi.git
+$ cd pybbi
+$ pip install -e .
+```
+
+### Troubleshooting
 
 On OSX, you may get errors about missing header files (e.g., `png.h`, `openssl/sha.h`), which even if installed may not be located in standard include locations. Either [create the required symlinks](https://www.anintegratedworld.com/mac-osx-fatal-error-opensslsha-h-file-not-found/) or update the `C_INCLUDE_PATH` environment variable accordingly before installing pybbi.
 
@@ -90,6 +93,6 @@ On OSX, you may get errors about missing header files (e.g., `png.h`, `openssl/s
 export C_INCLUDE_PATH="/usr/local/include/libpng:/usr/local/opt/openssl/include:$C_INCLUDE_PATH"
 ```
 
-## Notes
+### Notes
 
 Unfortunately, Kent's C source is not well-behaved library code, as it is littered with error calls that call `exit()`. `pybbi` will catch and pre-empt common input errors, but if somehow an internal error does get raised, it will terminate your interpreter instance.
