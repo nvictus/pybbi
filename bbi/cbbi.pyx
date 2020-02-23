@@ -1,5 +1,4 @@
 #!python
-#cython: language_level=3
 #cython: embedsignature=True
 from six.moves.urllib.request import urlopen
 from six.moves.urllib.parse import urlparse
@@ -8,7 +7,6 @@ import io
 import os.path as op
 import sys
 
-import pandas as pd
 import numpy as np
 
 from libc.math cimport sqrt
@@ -226,6 +224,11 @@ cdef class BbiFile:
         pd.DataFrame
 
         """
+        try:
+            import pandas as pd
+        except ImportError:
+            raise ImportError("fetch_intervals requires pandas")
+
         if self.bbi == NULL:
             raise OSError("File closed")
 
