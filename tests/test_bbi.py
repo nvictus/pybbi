@@ -125,7 +125,6 @@ def test_fetch_summary_stats(path):
         bbi.fetch(path, 'chr21', 20000000, 20001000, bins=10, summary='foo')
 
 
-@pytest.mark.xfail
 def test_aws_403_redirect():
     # See https://stat.ethz.ch/pipermail/bioc-devel/2016-May/009241.html
     url = 'https://www.encodeproject.org/files/ENCFF620UMO/@@download/ENCFF620UMO.bigWig'

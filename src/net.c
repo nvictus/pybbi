@@ -1241,6 +1241,17 @@ return netUrlHeadExt(url, "HEAD", hash);
 }
 
 
+int netUrlFakeHeadByGet(char *url, struct hash *hash)
+/* Use GET with byteRange as an alternate method to HEAD.
+ * Return status. */
+{
+char rangeUrl[MAXURLSIZE];
+safef(rangeUrl, sizeof(rangeUrl), "%s;byterange=0-0", url);
+int status = netUrlHeadExt(rangeUrl, "GET", hash);
+return status;
+}
+
+
 long long netUrlSizeByRangeResponse(char *url)
 /* Use byteRange as a work-around alternate method to get file size (content-length).  
  * Return negative number if can't get. */
@@ -1428,8 +1439,14 @@ while(TRUE)
 	    warn("Strange http header on %s", url);
 	    return FALSE;
 	    }
-	if (startsWith("30", code) && isdigit(code[2])
-	    && ((code[2] >= '0' && code[2] <= '3') || code[2] == '7') && code[3] == 0)
+    /* https://github.com/ucscGenomeBrowser/kent/commit/7807b5c21514ccf345d2b610e6ba1ed39725d269 */
+    if (sameString(code, "300")
+        || sameString(code, "301")
+        || sameString(code, "302")
+        || sameString(code, "303")
+        || sameString(code, "307")
+        || sameString(code, "308")
+        )
 	    {
 	    redirect = TRUE;
 	    }

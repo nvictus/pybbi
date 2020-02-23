@@ -169,6 +169,10 @@ int netUrlHead(char *url, struct hash *hash);
  * lines with upper cased keywords for case-insensitive lookup, 
  * including hopefully CONTENT-TYPE: . */
 
+int netUrlFakeHeadByGet(char *url, struct hash *hash);
+/* Use GET with byteRange as an alternate method to HEAD.
+ * Return status. */
+
 long long netUrlSizeByRangeResponse(char *url);
 /* Use byteRange as a work-around alternate method to get file size (content-length).  
  * Return negative number if can't get. */

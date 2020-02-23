@@ -5,7 +5,6 @@ from setuptools.command.build_ext import build_ext as _build_ext
 from subprocess import check_call
 from distutils import log
 import os.path as op
-import glob
 import sys
 import os
 import re
@@ -13,50 +12,6 @@ import io
 
 
 thisdir = op.dirname(op.realpath(__file__))
-
-# https://solitum.net/openssl-os-x-el-capitan-and-brew/
-INCLUDE_DIRS = [
-    op.join(sys.prefix, 'include'),
-    op.join(sys.prefix, 'include', 'openssl'),
-    '/usr/include',
-    '/usr/include/openssl',
-    '/usr/local/opt/openssl/lib',  # darwin
-]
-INCLUDE_DIRS += glob.glob(op.join(sys.prefix, 'include', 'libpng*'))
-INCLUDE_DIRS += glob.glob('/usr/local/include/libpng*')  # darwin
-
-LIBRARY_DIRS = [
-    op.join(sys.prefix, 'lib'),
-    '/lib',
-    '/usr/lib',
-    '/usr/local/lib'
-    '/usr/local/opt/openssl/lib',  # darwin
-]
-
-
-include_dirs = []
-for inc_dir in INCLUDE_DIRS:
-    if op.isdir(inc_dir):
-        include_dirs.append(inc_dir)
-        break
-pth = os.environ.get("CPATH")
-if pth:
-    include_dirs += pth.split(':')
-os.environ["CPATH"] = ':'.join(include_dirs)
-
-
-library_dirs = []
-for lib_dir in LIBRARY_DIRS:
-    if op.isdir(lib_dir):
-        library_dirs.append(lib_dir)
-        break
-pth = os.environ.get("LIBRARY_PATH")
-if pth:
-    library_dirs += pth.split(':')
-os.environ["LIBRARY_PATH"] = ':'.join(library_dirs)
-
-
-os.environ["LDFLAGS"] = '-Wl,--no-as-needed ' + os.environ.get("LDFLAGS", "")
 
 
 class lazylist(list):
@@ -104,12 +59,12 @@ class build_ext(_build_ext):
         os.environ['SETUP_PY'] = '1'
 
         # First, compile our C library: libkent.a
-        import sysconfig
-        log.info(sysconfig.get_config_vars())
-        log.info("CPATH: " + os.environ.get("CPATH", ""))
-        log.info("LIBRARY_PATH: " + os.environ.get("LIBRARY_PATH", ""))
+        # import sysconfig
+        # log.info(sysconfig.get_config_vars())
+        # log.info("CPATH: " + os.environ.get("CPATH", ""))
+        # log.info("LIBRARY_PATH: " + os.environ.get("LIBRARY_PATH", ""))
         log.info("Compiling libkent archive...")
-        check_call(['make', 'build-c'])
+        check_call(['make', 'build-ucsc'])
 
         # Now, proceed to build extension modules
         log.info("Building extension module...")
@@ -119,6 +74,31 @@ class build_ext(_build_ext):
 def get_ext_modules():
     from Cython.Build import cythonize
     import numpy
+    import pkgconfig
+    import sysconfig
+
+    # https://solitum.net/openssl-os-x-el-capitan-and-brew/
+    if sys.platform == "darwin":
+        s = '/usr/local/opt/openssl/lib/pkgconfig'
+        old = os.environ.get('PKG_CONFIG_PATH')
+        if old:
+            s = old + ':' + s
+        os.environ['PKG_CONFIG_PATH'] = s
+        os.environ['MACOSX_DEPLOYMENT_TARGET'] = \
+            sysconfig.get_config_var('MACOSX_DEPLOYMENT_TARGET')
+        os.environ['BLDSHARED'] = \
+            'gcc -bundle -undefined dynamic_lookup -arch x86_64 -g'
+        os.environ['LDSHARED'] = \
+            'gcc -bundle -undefined dynamic_lookup -arch x86_64 -g'
+
+    if sys.platform == "linux":
+        s = '-Wl,--no-as-needed'
+        old = os.environ.get("LDFLAGS")
+        if old:
+            s = s + ' ' + old
+        os.environ["LDFLAGS"] = s
+
+    d = pkgconfig.parse('zlib openssl libpng')
 
     ext_modules = [
         Extension(
@@ -127,15 +107,16 @@ def get_ext_modules():
                 op.join(thisdir, 'bbi/cbbi.pyx')
             ],
             libraries=[
-                'c', 'z', 'pthread', 'ssl', 'crypto', 'png', 'kent'
-            ],
+                'kent',
+            ] + d.pop('libraries', []),
             library_dirs=[
                 op.join(thisdir, 'src/x86_64'),
-            ] + library_dirs,
+            ] + d.pop('library_dirs', []),
             include_dirs=[
                 numpy.get_include(),
                 op.join(thisdir, 'include'),
-            ] + include_dirs,
+            ] + d.pop('include_dirs', []),
+            **d
         ),
     ]
     return cythonize(ext_modules)
@@ -167,6 +148,7 @@ setup(
         'setuptools>=18.0',
         'cython',
         'numpy',
+        'pkgconfig'
     ],
     install_requires=[
         'six',

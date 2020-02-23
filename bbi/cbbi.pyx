@@ -178,7 +178,7 @@ cdef class BbiFile:
     @property
     def zooms(self):
         """
-        A list of "reduction levels" (bin sizes), i.e. the number of bases per 
+        A list of "reduction levels" (bin sizes), i.e. the number of bases per
         summary item.
 
         """
@@ -208,7 +208,7 @@ cdef class BbiFile:
 
     def fetch_intervals(self, chrom, start, end):
         """
-        Return a data frame of intervals overlapping a specified genomic query 
+        Return a data frame of intervals overlapping a specified genomic query
         interval.
 
         Parameters
@@ -234,7 +234,7 @@ cdef class BbiFile:
             ivals = _fetch_intervals(self.bbi, self.sig, chrom, start, end)
         errCatchEnd(e)
         errCatchHandle(e)
-        
+
         if self.is_bigwig:
             df = pd.DataFrame(ivals, columns=['chrom', 'start', 'end', 'value'])
             df['start'] = df['start'].astype(int)
@@ -251,13 +251,13 @@ cdef class BbiFile:
         return df
 
     def fetch(
-        self, 
-        str chrom, 
-        int start, 
-        int end, 
-        int bins=-1, 
-        double missing=0.0, 
-        double oob=np.nan, 
+        self,
+        str chrom,
+        int start,
+        int end,
+        int bins=-1,
+        double missing=0.0,
+        double oob=np.nan,
         str summary='mean'
     ):
         """
@@ -297,12 +297,12 @@ cdef class BbiFile:
 
         Notes
         -----
-        A BigWig file encodes a step function, and the value at a base 
-        is given by the "value" field of the unique interval that contains that 
+        A BigWig file encodes a step function, and the value at a base
+        is given by the "value" field of the unique interval that contains that
         base.
 
-        A BigBed file encodes a collection of (possibly overlapping) intervals, 
-        and the value at a base is given by the coverage (i.e. pileup) of 
+        A BigBed file encodes a collection of (possibly overlapping) intervals,
+        and the value at a base is given by the coverage (i.e. pileup) of
         intervals that contain that base.
 
         """
@@ -311,14 +311,14 @@ cdef class BbiFile:
         cdef errCatch *e = errCatchNew()
         if errCatchStart(e):
             r = _fetch(
-                self.bbi, 
-                self.sig, 
-                chrom, 
-                start, 
-                end, 
-                bins, 
-                missing, 
-                oob, 
+                self.bbi,
+                self.sig,
+                chrom,
+                start,
+                end,
+                bins,
+                missing,
+                oob,
                 summary
             )
         errCatchEnd(e)
@@ -326,12 +326,12 @@ cdef class BbiFile:
         return r
 
     def stackup(
-        self, 
-        chroms, 
-        starts, 
-        ends, 
-        bins=-1, 
-        missing=0.0, 
+        self,
+        chroms,
+        starts,
+        ends,
+        bins=-1,
+        missing=0.0,
         oob=np.nan,
         summary='mean'
     ):
@@ -382,13 +382,13 @@ cdef class BbiFile:
         cdef errCatch *e = errCatchNew()
         if errCatchStart(e):
             r = _stackup(
-                self.bbi, 
-                self.sig, 
-                chroms_, 
-                starts_, 
-                ends_, 
-                bins, 
-                missing, 
+                self.bbi,
+                self.sig,
+                chroms_,
+                starts_,
+                ends_,
+                bins,
+                missing,
                 oob,
                 summary
             )
@@ -614,12 +614,12 @@ def fetch(
 
     Notes
     -----
-    A BigWig file encodes a step function, and the value at a position 
-    is given by the "value" field of the unique interval that contains that 
+    A BigWig file encodes a step function, and the value at a position
+    is given by the "value" field of the unique interval that contains that
     position.
 
-    A BigBed file encodes a collection of (possibly overlapping) intervals, 
-    and the value at a position is given by the coverage (i.e. pileup) of 
+    A BigBed file encodes a collection of (possibly overlapping) intervals,
+    and the value at a position is given by the coverage (i.e. pileup) of
     intervals that contain that position.
 
     """
@@ -740,7 +740,7 @@ cdef dict _autosql(bbiFile *bbi):
     cdef char *cText = bigBedAutoSqlText(bbi)
     if cText == NULL:
         return None
-    
+
     cdef asObject *o = bigBedAsOrDefault(bbi)
     cdef asColumn *col = o.columnList
     cdef asTypeInfo *typ
