@@ -1,4 +1,5 @@
 #!python
+#cython: language_level=3
 #cython: embedsignature=True
 cimport numpy as np
 from libc.stdio cimport FILE
@@ -371,3 +372,36 @@ cdef extern from "asParse.h":
         bint isTable
         bint isSimple
         int bla
+
+
+cdef extern from "dystring.h":
+
+    cdef struct dyString:
+        dyString *next
+        char *string
+        int bufSize
+        int stringSize
+
+
+cdef extern from 'setjmp.h':
+    struct __jmp_buf_tag:
+        pass
+    ctypedef __jmp_buf_tag jmp_buf
+    int setjmp (jmp_buf __env)
+    int longjmp (jmp_buf __env, int val)
+
+
+cdef extern from "errCatch.h":
+
+    cdef struct errCatch:
+        errCatch *next
+        jmp_buf jmpBuf
+        dyString *message
+        boolean gotError
+        boolean gotWarning
+
+    errCatch *errCatchNew()
+    boolean errCatchStart(errCatch *errCatch)
+    boolean errCatchPushHandlers(errCatch *errCatch)
+    void errCatchEnd(errCatch *errCatch)
+    void errCatchFree(errCatch *errCatch)

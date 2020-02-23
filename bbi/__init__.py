@@ -1,5 +1,4 @@
 #-*- coding: utf-8 -*-
-from __future__ import division, print_function, absolute_import
 from .cbbi import (
     is_bbi,
     is_bigwig,
@@ -7,13 +6,23 @@ from .cbbi import (
     info,
     zooms,
     chromsizes,
+    fetch_intervals,
     fetch,
     stackup,
-    # fetch_intervals,
-    BbiFile
+    open
 )
 
-__all__ = ['is_bbi', 'is_bigwig', 'is_bigbed', 'info', 'zooms', 'chromsizes',
-           'fetch', 'stackup', 'BbiFile']  #  'bool' is not a type identifier
+__all__ = [
+    'is_bbi',
+    'is_bigwig',
+    'is_bigbed',
+    'info',
+    'zooms',
+    'chromsizes',
+    'fetch_intervals',
+    'fetch',
+    'stackup',
+    'open'
+]
 
 __version__ = '0.2.1-dev'
