@@ -159,6 +159,7 @@ def chromsizes(str inFile):
         raise OSError("Not a bbi file: {}".format(inFile))
 
     # traverse the chromosome list
+    # chromList is allocated
     cdef bbiChromInfo *chromList = bbiChromList(bbi)
     cdef bbiChromInfo *info = chromList
     cdef list c_list = []
@@ -291,7 +292,6 @@ def fetch_intervals(
     cdef bits32 sig = _check_sig(inFile)
     cdef bytes bInFile = inFile.encode('utf-8')
     cdef bbiFile *bbi
-    cdef BbiFetchIntervals fetcher
     if sig == bigWigSig:
         bbi = bigWigFileOpen(bInFile)
     elif sig == bigBedSig:
@@ -328,6 +328,7 @@ def fetch_intervals(
         validEnd = chromSize
 
     # query
+    # interval list is allocated out of lm
     cdef lm *lm = lmInit(0)
     cdef bbiInterval *bwInterval
     cdef bigBedInterval *bbInterval
@@ -354,8 +355,6 @@ def fetch_intervals(
             bbInterval = bbInterval.next
 
     # clean up
-    # if cRest != NULL:
-    #     free(cRest)
     lmCleanup(&lm)
     bbiFileClose(&bbi)
 
@@ -621,6 +620,7 @@ cdef inline void array_query_full(
         validEnd = chromSize
 
     # Fill valid regions
+    # intervalList is allocated out of lm
     cdef lm *lm = lmInit(0)
     cdef bbiInterval *intervalList = fetchIntervals(
         bbi, chromName, validStart, validEnd, lm)
@@ -689,6 +689,7 @@ cdef inline void array_query_summarized(
     cdef bbiZoomLevel *zoomObj = bbiBestZoom(bbi.levelList, zoomLevel)
 
     # Create and populate summary elements
+    # elements is allocated
     cdef boolean result = False
     cdef bbiSummaryElement *elements
     AllocArray(elements, nbins)
@@ -754,6 +755,7 @@ cdef boolean _bbiSummariesFromZoom(
         return False
 
     # Find appropriate zoom-level summary data
+    # summList is allocated
     cdef bbiSummary *summList = bbiSummariesInRegion(
         zoom, bbi, chromId, validStart, validEnd)
 
@@ -798,6 +800,7 @@ cdef boolean _bbiSummariesFromFull(
     # Summarize data, not using zoom. Updates the summary elements.
 
     # Find appropriate interval elements
+    # intervalList is allocated out of lm
     cdef lm *lm = lmInit(0)
     cdef bbiInterval *intervalList = NULL
     intervalList = fetchIntervals(bbi, chromName, validStart, validEnd, lm)
