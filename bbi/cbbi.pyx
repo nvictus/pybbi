@@ -548,9 +548,11 @@ def stackup(
         raise OSError("Not a bbi file: {}".format(inFile))
 
     # check the coordinate inputs
-    if not len(np.unique(ends_ - starts_)) == 1:
+    if bins < 0 and len(np.unique(ends_ - starts_)) != 1:
         bbiFileClose(&bbi)
-        raise ValueError("Query windows must have equal size")
+        raise ValueError(
+            "Query windows must have equal size if `bins` is not specified."
+        )
 
     # prepare output
     cdef int length = ends_[0] - starts_[0]
