@@ -125,6 +125,22 @@ def test_fetch_summary_stats(path):
         bbi.fetch(path, 'chr21', 20000000, 20001000, bins=10, summary='foo')
 
 
+@pytest.mark.parametrize('path', bbi_paths)
+def test_stackup(path):
+    x = bbi.stackup(path, ['chr21', 'chr21'], [0, 2000], [1000, 3000])
+    assert x.shape == (2, 1000)
+
+    x = bbi.stackup(path, ['chr21', 'chr21'], [0, 2000], [1000, 3000], bins=10)
+    assert x.shape == (2, 10)
+
+    # unequal interval lengths
+    with pytest.raises(ValueError):
+        bbi.stackup(path, ['chr21', 'chr21'], [0, 2000], [1000, 3500])
+
+    x = bbi.stackup(path, ['chr21', 'chr21'], [0, 2000], [1000, 3500], bins=10)
+    assert x.shape == (2, 10)
+
+
 def test_aws_403_redirect():
     # See https://stat.ethz.ch/pipermail/bioc-devel/2016-May/009241.html
     url = 'https://www.encodeproject.org/files/ENCFF620UMO/@@download/ENCFF620UMO.bigWig'
