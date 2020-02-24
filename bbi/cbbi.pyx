@@ -255,7 +255,6 @@ def info(str inFile):
                                       summ.validCount)),
         }
     }
-
     bbiFileClose(&bbi)
 
     return d
@@ -304,16 +303,19 @@ def fetch_intervals(
     cdef bytes chromName = chrom.encode('ascii')
     cdef int chromSize = bbiChromSize(bbi, chromName)
     if chromSize == 0:
+        bbiFileClose(&bbi)
         raise KeyError("Chromosome not found: {}".format(chrom))
 
     # check the coordinates
     if end < 0:
         end = chromSize
     if start > chromSize:
+        bbiFileClose(&bbi)
         raise ValueError(
             "Start exceeds the chromosome length, {}.".format(chromSize))
     cdef length = end - start
     if length < 0:
+        bbiFileClose(&bbi)
         raise ValueError(
             "Interval cannot have negative length:"
             " start = {}, end = {}.".format(start, end))
@@ -428,16 +430,19 @@ def fetch(
     cdef bytes chromName = chrom.encode('ascii')
     cdef int chromSize = bbiChromSize(bbi, chromName)
     if chromSize == 0:
+        bbiFileClose(&bbi)
         raise KeyError("Chromosome not found: {}".format(chrom))
 
     # check the coordinates
     if end < 0:
         end = chromSize
     if start > chromSize:
+        bbiFileClose(&bbi)
         raise ValueError(
             "Start exceeds the chromosome length, {}.".format(chromSize))
     cdef length = end - start
     if length < 0:
+        bbiFileClose(&bbi)
         raise ValueError(
             "Interval cannot have negative length:"
             " start = {}, end = {}.".format(start, end))
@@ -457,6 +462,7 @@ def fetch(
         try:
             summary_type = BBI_SUMMARY_TYPES[summary]
         except KeyError:
+            bbiFileClose(&bbi)
             raise ValueError(
                 'Invalid summary type "{}". Must be one of: {}.'.format(
                     summary,
@@ -544,6 +550,7 @@ def stackup(
 
     # check the coordinate inputs
     if not len(np.unique(ends_ - starts_)) == 1:
+        bbiFileClose(&bbi)
         raise ValueError("Query windows must have equal size")
 
     # prepare output
@@ -564,10 +571,12 @@ def stackup(
         chromName = chroms_[i].encode('ascii')
         chromSize = bbiChromSize(bbi, chromName)
         if chromSize == 0:
+            bbiFileClose(&bbi)
             raise KeyError("Chromosome not found: {}".format(chroms_[i]))
         start = starts_[i]
         end = ends_[i]
         if start > chromSize:
+            bbiFileClose(&bbi)
             raise ValueError(
                 "Start exceeds the chromosome length, {}.".format(chromSize))
         if bins < 1:
@@ -578,6 +587,7 @@ def stackup(
             try:
                 summary_type = BBI_SUMMARY_TYPES[summary]
             except KeyError:
+                bbiFileClose(&bbi)
                 raise ValueError(
                     'Invalid summary type "{}". Must be one of: {}.'.format(
                         summary,
