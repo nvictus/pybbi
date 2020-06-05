@@ -200,6 +200,7 @@ enum bbiSummaryType
     bbiSumMin = 2,	/* Minimum value */
     bbiSumCoverage = 3,  /* Bases in region containing actual data. */
     bbiSumStandardDeviation = 4, /* Standard deviation in window. */
+    bbiSumSum = 5, /* Sum value */
     };
 
 enum bbiSummaryType bbiSummaryTypeFromString(char *string);

@@ -78,6 +78,7 @@ cpdef dict BBI_SUMMARY_TYPES = {
     'min': bbiSumMin,
     'cov': bbiSumCoverage,
     'std': bbiSumStandardDeviation,
+    'sum': bbiSumSum,
 }
 
 
@@ -731,6 +732,8 @@ cdef inline void array_query_summarized(
                         val = sqrt(var_from_sums(el.sumData,
                                                  el.sumSquares,
                                                  el.validCount))
+                    elif summaryType == bbiSumSum:
+                        val = el.sumData
                     else:
                         raise RuntimeError
                     out[i] = val
