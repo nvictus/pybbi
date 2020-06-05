@@ -255,6 +255,7 @@ def info(str inFile):
             'std': sqrt(var_from_sums(summ.sumData,
                                       summ.sumSquares,
                                       summ.validCount)),
+            'sum': summ.sumData,
         }
     }
     bbiFileClose(&bbi)
