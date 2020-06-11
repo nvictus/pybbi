@@ -120,9 +120,7 @@ def test_fetch_summary_stats(path):
         path, 'chr21', 20000000, 20001000, bins=10, summary='max'
     ).max()
     assert np.isclose(vmax, np.max(values))
-    vsum = bbi.fetch(
-        path, 'chr21', 20000000, 20001000, bins=10, summary='sum'
-    ).sum()
+    vsum = bbi.fetch(path, 'chr21', 20000000, 20001000, bins=1000).sum()
     assert np.isclose(vsum, np.sum(values))
 
     with pytest.raises(ValueError):
