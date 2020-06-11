@@ -695,7 +695,7 @@ if (ret)
 		case bbiSumStandardDeviation:
 		    val = calcStdFromSums(el->sumData, el->sumSquares, el->validCount);
 		    break;
-        case bbiSumSum:
+		case bbiSumSum:
 		    val = el->sumData;
 		    break;
 		default:
