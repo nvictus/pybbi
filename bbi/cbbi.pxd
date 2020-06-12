@@ -122,6 +122,7 @@ cdef extern from "bbiFile.h":
         bbiSumMin = 2
         bbiSumCoverage = 3
         bbiSumStandardDeviation = 4
+        bbiSumSum = 5
 
     cdef struct bbiSummary:
         bbiSummary *next

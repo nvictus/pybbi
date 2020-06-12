@@ -280,6 +280,8 @@ else if (sameWord(string, "coverage") || sameWord(string, "dataCoverage"))
     return bbiSumCoverage;
 else if (sameWord(string, "std"))
     return bbiSumStandardDeviation;
+else if (sameWord(string, "sum"))
+    return bbiSumSum;
 else
     {
     errAbort("Unknown bbiSummaryType %s", string);
@@ -302,6 +304,8 @@ switch (type)
         return "coverage";
     case bbiSumStandardDeviation:
         return "std";
+    case bbiSumSum:
+        return "sum";
     default:
 	errAbort("Unknown bbiSummaryType %d", (int)type);
 	return NULL;
@@ -690,6 +694,9 @@ if (ret)
 		    break;
 		case bbiSumStandardDeviation:
 		    val = calcStdFromSums(el->sumData, el->sumSquares, el->validCount);
+		    break;
+		case bbiSumSum:
+		    val = el->sumData;
 		    break;
 		default:
 		    internalErr();

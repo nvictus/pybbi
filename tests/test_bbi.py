@@ -120,6 +120,10 @@ def test_fetch_summary_stats(path):
         path, 'chr21', 20000000, 20001000, bins=10, summary='max'
     ).max()
     assert np.isclose(vmax, np.max(values))
+    vsum = bbi.fetch(path, 'chr21', 20000000, 20001000, bins=100, summary='sum')
+    values_sum_every_ten = np.reshape(values, (-1, 10)).sum(axis=-1)
+    assert len(vsum) == len(values_sum_every_ten)
+    assert np.allclose(vsum, values_sum_every_ten)
 
     with pytest.raises(ValueError):
         bbi.fetch(path, 'chr21', 20000000, 20001000, bins=10, summary='foo')
