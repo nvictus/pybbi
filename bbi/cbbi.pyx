@@ -37,6 +37,20 @@ cpdef dict BBI_SUMMARY_TYPES = {
     'sum': bbiSumSum,
 }
 
+
+# struct asTypeInfo
+#     {
+#     enum asTypes type;         /* Numeric ID of low level type. */
+#     char *name;                    /* Text ID of low level type. */
+#     bool isUnsigned;               /* True if an unsigned int of some type. */
+#     bool stringy;                  /* True if a string or blob. */
+#     char *sqlName;                 /* SQL type name. */
+#     char *cName;                   /* C type name. */
+#     char *listyName;               /* What functions that load a list are called. */
+#     char *nummyName;               /* What functions that load a number are called. */
+#     char *outFormat;           /* Output format for printf. %d, %u, etc. */
+#     char *djangoName;              /* Django type name */
+#     };
 # struct asTypeInfo asTypes[] = {
 #     {t_double,  "double",  FALSE, FALSE, "double",            "double",        "Double",   "Double",   "%g",   "FloatField"},
 #     {t_float,   "float",   FALSE, FALSE, "float",             "float",         "Float",    "Float",    "%g",   "FloatField"},
@@ -56,6 +70,7 @@ cpdef dict BBI_SUMMARY_TYPES = {
 #     {t_object,  "table",   FALSE, FALSE, "longblob",          "!error!",       "Object",   "Object",   NULL,   "TextField"},
 #     {t_simple,  "simple",  FALSE, FALSE, "longblob",          "!error!",       "Simple",   "Simple",   NULL,   "TextField"},
 # };
+# http://genomewiki.ucsc.edu/index.php/AutoSql
 cdef dict AUTOSQL_TYPE_MAP = {
     'string': 'object',   # varchar(255)
     'char': 'object',     # char
@@ -67,12 +82,15 @@ cdef dict AUTOSQL_TYPE_MAP = {
     'ushort': 'uint16',   # unsigned 16 bit integer
     'byte': 'int8',       # signed 8 bit integer
     'ubyte': 'uint8',     # unsigned 8 bit integer
-    'off': 'int64',       # 64 bit integer.
-    # 'lstring': 'bytes',  # longblob
-    # 'enum': 'object',     # enum as char
-    # 'set': 'uint32',      # unsigned 32 bit integer
-    # 'object': 'bytes',   # longblob
-    # 'simple': 'bytes',   # longblob
+    'off': 'int64',       # 64 bit integer
+    'bigint': 'int64',    # 64 bit integer
+
+    # Exotic types will be treated as object for now
+    'lstring': 'object',  # longblob
+    'object': 'object',   # longblob
+    'simple': 'object',   # longblob
+    'enum': 'object',     # enum?
+    'set': 'object',      # set?
 }
 
 
@@ -260,8 +278,25 @@ cdef class BbiFile:
         if self.bbi != NULL:
             bbiFileClose(&self.bbi)
 
+    def read_autosql(self):
+        if self.bbi == NULL:
+            raise OSError("File closed")
+
+        if self.is_bigwig:
+            return None
+
+        # Try to read autosql definition string
+        cdef char *cText = bigBedAutoSqlText(self.bbi)
+        if cText == NULL:
+            # Use default autosql BED definition based on number of fields
+            cText = bedAsDef(self.bbi.definedFieldCount, self.bbi.fieldCount)
+        cdef str raw_text = (<bytes>cText).decode('ascii')
+        freeMem(cText)
+
+        return raw_text
+
     @property
-    def autosql(self):
+    def schema(self):
         if self.bbi == NULL:
             raise OSError("File closed")
 
@@ -285,9 +320,10 @@ cdef class BbiFile:
         # Extract column definitions
         cdef asColumn *col = o.columnList
         cdef asTypeInfo *typ
-        cdef str name, t_name
+        cdef str name, t_name, d_name
         cdef list columns = []
         cdef dict dtypes = {}
+        cdef dict describe = {}
         while col != NULL:
 
             # field name
@@ -307,6 +343,10 @@ cdef class BbiFile:
                 else:
                     dtypes[name] = 'object'
 
+            # field description
+            d_name = (<bytes>(col.comment)).decode('ascii')
+            describe[name] = d_name
+
             col = col.next
 
         # Clean up
@@ -318,6 +358,7 @@ cdef class BbiFile:
             'comment': comment,
             'columns': columns,
             'dtypes': dtypes,
+            'description': describe,
         }
 
     @property
@@ -476,7 +517,7 @@ cdef class BbiFile:
                 else:
                     restTup = ()
                 ivals.append(
-                    (chrom, bbInterval.start, bbInterval.end) + restTup
+                    (chrom, bbInterval.start, bbInterval.end, *restTup)
                 )
                 bbInterval = bbInterval.next
 
