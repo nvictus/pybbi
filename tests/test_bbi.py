@@ -120,9 +120,29 @@ def test_fetch_summary_stats(path):
         path, 'chr21', 20000000, 20001000, bins=10, summary='max'
     ).max()
     assert np.isclose(vmax, np.max(values))
+    vsum = bbi.fetch(path, 'chr21', 20000000, 20001000, bins=100, summary='sum')
+    values_sum_every_ten = np.reshape(values, (-1, 10)).sum(axis=-1)
+    assert len(vsum) == len(values_sum_every_ten)
+    assert np.allclose(vsum, values_sum_every_ten)
 
     with pytest.raises(ValueError):
         bbi.fetch(path, 'chr21', 20000000, 20001000, bins=10, summary='foo')
+
+
+@pytest.mark.parametrize('path', bbi_paths)
+def test_stackup(path):
+    x = bbi.stackup(path, ['chr21', 'chr21'], [0, 2000], [1000, 3000])
+    assert x.shape == (2, 1000)
+
+    x = bbi.stackup(path, ['chr21', 'chr21'], [0, 2000], [1000, 3000], bins=10)
+    assert x.shape == (2, 10)
+
+    # unequal interval lengths
+    with pytest.raises(ValueError):
+        bbi.stackup(path, ['chr21', 'chr21'], [0, 2000], [1000, 3500])
+
+    x = bbi.stackup(path, ['chr21', 'chr21'], [0, 2000], [1000, 3500], bins=10)
+    assert x.shape == (2, 10)
 
 
 def test_aws_403_redirect():

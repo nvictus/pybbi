@@ -34,6 +34,7 @@ cpdef dict BBI_SUMMARY_TYPES = {
     'min': bbiSumMin,
     'cov': bbiSumCoverage,
     'std': bbiSumStandardDeviation,
+    'sum': bbiSumSum,
 }
 
 
@@ -735,6 +736,7 @@ cdef dict _info(bbiFile *bbi):
             'std': sqrt(var_from_sums(summ.sumData,
                                       summ.sumSquares,
                                       summ.validCount)),
+            'sum': summ.sumData,
         }
     }
 
@@ -790,16 +792,19 @@ cdef _fetch_intervals(
     cdef bytes chromName = chrom.encode('ascii')
     cdef int chromSize = bbiChromSize(bbi, chromName)
     if chromSize == 0:
+        bbiFileClose(&bbi)
         raise KeyError("Chromosome not found: {}".format(chrom))
 
     # check the coordinates
     if end < 0:
         end = chromSize
     if start > chromSize:
+        bbiFileClose(&bbi)
         raise ValueError(
             "Start exceeds the chromosome length, {}.".format(chromSize))
     cdef length = end - start
     if length < 0:
+        bbiFileClose(&bbi)
         raise ValueError(
             "Interval cannot have negative length:"
             " start = {}, end = {}.".format(start, end))
@@ -813,6 +818,7 @@ cdef _fetch_intervals(
 
     # query
     cdef list out = []
+    # interval list is allocated out of lm
     cdef lm *lm = lmInit(0)
     cdef bbiInterval *bwInterval
     cdef bigBedInterval *bbInterval
@@ -843,8 +849,6 @@ cdef _fetch_intervals(
             bbInterval = bbInterval.next
 
     # clean up
-    # if cRest != NULL:
-    #     free(cRest)
     lmCleanup(&lm)
 
     return out
@@ -871,16 +875,19 @@ cdef _fetch(
     cdef bytes chromName = chrom.encode('ascii')
     cdef int chromSize = bbiChromSize(bbi, chromName)
     if chromSize == 0:
+        bbiFileClose(&bbi)
         raise KeyError("Chromosome not found: {}".format(chrom))
 
     # check the coordinates
     if end < 0:
         end = chromSize
     if start > chromSize:
+        bbiFileClose(&bbi)
         raise ValueError(
             "Start exceeds the chromosome length, {}.".format(chromSize))
     cdef length = end - start
     if length < 0:
+        bbiFileClose(&bbi)
         raise ValueError(
             "Interval cannot have negative length:"
             " start = {}, end = {}.".format(start, end))
@@ -900,6 +907,7 @@ cdef _fetch(
         try:
             summary_type = BBI_SUMMARY_TYPES[summary]
         except KeyError:
+            bbiFileClose(&bbi)
             raise ValueError(
                 'Invalid summary type "{}". Must be one of: {}.'.format(
                     summary,
@@ -933,8 +941,11 @@ cdef _stackup(
         fetcher = bigBedCoverageIntervals
 
     # check the coordinate inputs
-    if not len(np.unique(ends_ - starts_)) == 1:
-        raise ValueError("Query windows must have equal size")
+    if bins < 0 and len(np.unique(ends_ - starts_)) != 1:
+        bbiFileClose(&bbi)
+        raise ValueError(
+            "Query windows must have equal size if `bins` is not specified."
+        )
 
     # prepare output
     cdef int length = ends_[0] - starts_[0]
@@ -954,10 +965,12 @@ cdef _stackup(
         chromName = chroms_[i].encode('ascii')
         chromSize = bbiChromSize(bbi, chromName)
         if chromSize == 0:
+            bbiFileClose(&bbi)
             raise KeyError("Chromosome not found: {}".format(chroms_[i]))
         start = starts_[i]
         end = ends_[i]
         if start > chromSize:
+            bbiFileClose(&bbi)
             raise ValueError(
                 "Start exceeds the chromosome length, {}.".format(chromSize))
         if bins < 1:
@@ -969,6 +982,7 @@ cdef _stackup(
             try:
                 summary_type = BBI_SUMMARY_TYPES[summary]
             except KeyError:
+                bbiFileClose(&bbi)
                 raise ValueError(
                     'Invalid summary type "{}". Must be one of: {}.'.format(
                         summary,
@@ -1000,6 +1014,7 @@ cdef inline void array_query_full(
         validEnd = chromSize
 
     # Fill valid regions
+    # intervalList is allocated out of lm
     cdef lm *lm = lmInit(0)
     cdef bbiInterval *intervalList = fetchIntervals(
         bbi, chromName, validStart, validEnd, lm)
@@ -1069,6 +1084,7 @@ cdef inline void array_query_summarized(
     cdef bbiZoomLevel *zoomObj = bbiBestZoom(bbi.levelList, zoomLevel)
 
     # Create and populate summary elements
+    # elements is allocated
     cdef boolean result = False
     cdef bbiSummaryElement *elements
     AllocArray(elements, nbins)
@@ -1108,6 +1124,8 @@ cdef inline void array_query_summarized(
                         val = sqrt(var_from_sums(el.sumData,
                                                  el.sumSquares,
                                                  el.validCount))
+                    elif summaryType == bbiSumSum:
+                        val = el.sumData
                     else:
                         raise RuntimeError
                     out[i] = val
@@ -1135,6 +1153,7 @@ cdef boolean _bbiSummariesFromZoom(
         return False
 
     # Find appropriate zoom-level summary data
+    # summList is allocated
     cdef bbiSummary *summList = bbiSummariesInRegion(
         zoom, bbi, chromId, validStart, validEnd
     )
@@ -1181,6 +1200,7 @@ cdef boolean _bbiSummariesFromFull(
     # Summarize data, not using zoom. Updates the summary elements.
 
     # Find appropriate interval elements
+    # intervalList is allocated out of lm
     cdef lm *lm = lmInit(0)
     cdef bbiInterval *intervalList = NULL
     intervalList = fetchIntervals(bbi, chromName, validStart, validEnd, lm)
