@@ -12,6 +12,7 @@ python:
 
 install:
   - DISTUTILS_DEBUG=1 pip install -v -e .
+  - pip install pandas
 
 script:
   - ldd -r bbi/cbbi*.so

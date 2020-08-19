@@ -155,7 +155,8 @@ setup(
         'numpy'
     ],
     tests_require=[
-        'pytest'
+        'pytest',
+        'pandas'
     ],
     ext_modules=lazylist(get_ext_modules),
     cmdclass={
