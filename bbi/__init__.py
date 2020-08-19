@@ -1,28 +1,27 @@
-#-*- coding: utf-8 -*-
 from .cbbi import (
     is_bbi,
     is_bigwig,
     is_bigbed,
+    open,
     info,
-    zooms,
     chromsizes,
-    fetch_intervals,
+    zooms,
     fetch,
-    stackup,
-    open
+    fetch_intervals,
+    stackup
 )
 
 __all__ = [
     'is_bbi',
     'is_bigwig',
     'is_bigbed',
+    'open',
     'info',
-    'zooms',
     'chromsizes',
-    'fetch_intervals',
+    'zooms',
     'fetch',
+    'fetch_intervals',
     'stackup',
-    'open'
 ]
 
 __version__ = '0.2.3'

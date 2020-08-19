@@ -374,6 +374,9 @@ cdef extern from "asParse.h":
         bint isSimple
         int bla
 
+    asObject *asParseText(char *text)
+    void asObjectFree(asObject **pAs)
+
 
 cdef extern from "dystring.h":
 
@@ -406,3 +409,8 @@ cdef extern from "errCatch.h":
     boolean errCatchPushHandlers(errCatch *errCatch)
     void errCatchEnd(errCatch *errCatch)
     void errCatchFree(errCatch *errCatch)
+
+
+cdef extern from "basicBed.h":
+
+    char *bedAsDef(int bedFieldCount, int totalFieldCount)
