@@ -339,7 +339,7 @@ cdef class BbiFile:
 
         # clean up
         bbiChromInfoFreeList(&chromList)
-        
+
         return OrderedDict(c_list)
 
     @property
@@ -371,7 +371,7 @@ cdef class BbiFile:
             raise OSError("File closed")
 
         cdef bbiSummaryElement summ = bbiTotalSummary(self.bbi)
-        
+
         return {
             'version': self.bbi.version,
             'isCompressed': self.bbi.uncompressBufSize > 0,

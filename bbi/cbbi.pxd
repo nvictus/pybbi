@@ -1,5 +1,4 @@
 #!python
-#cython: language_level=3
 #cython: embedsignature=True
 cimport numpy as np
 from libc.stdio cimport FILE
