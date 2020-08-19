@@ -3,25 +3,17 @@ from .cbbi import (
     is_bigwig,
     is_bigbed,
     open,
+)
+
+from ._bbi import (
     info,
     chromsizes,
     zooms,
     fetch,
     fetch_intervals,
-    stackup
+    stackup,
 )
 
-__all__ = [
-    'is_bbi',
-    'is_bigwig',
-    'is_bigbed',
-    'open',
-    'info',
-    'chromsizes',
-    'zooms',
-    'fetch',
-    'fetch_intervals',
-    'stackup',
-]
+del cbbi, _bbi
 
 __version__ = '0.2.3'

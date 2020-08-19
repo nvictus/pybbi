@@ -155,7 +155,7 @@ cdef bbiFile* _open(str inFile, bits32 sig) except *:
     return bbi
 
 
-def is_bbi(str inFile):
+def is_bbi(inFile):
     """
     Returns True if `inFile` is a path or URL to a big binary file.
 
@@ -172,7 +172,7 @@ def is_bbi(str inFile):
     return _read_sig(inFile) > 0
 
 
-def is_bigwig(str inFile):
+def is_bigwig(inFile):
     """
     Returns True if `inFile` is a path or URL to a BigWig binary file.
 
@@ -189,7 +189,7 @@ def is_bigwig(str inFile):
     return _read_sig(inFile) == bigWigSig
 
 
-def is_bigbed(str inFile):
+def is_bigbed(inFile):
     """
     Returns True if `inFile` is a path or URL to a BigBed binary file.
 
@@ -721,207 +721,6 @@ cdef class BbiFile:
                     chromName, start, end, chromSize, oob, summary_type
                 )
         return out
-
-
-def chromsizes(str inFile):
-    """
-    Fetch the chromosome list of a bbi file. Returns an ordered dictionary of
-    chromosome names mapped to their sizes in bp.
-
-    Parameters
-    ----------
-    inFile : str
-        Path to BigWig or BigBed file.
-
-    Returns
-    -------
-    OrderedDict (str -> int)
-
-    """
-    with open(inFile) as f:
-        return f.chromsizes
-
-
-def zooms(str inFile):
-    """
-    Fetch the zoom levels of a bbi file. Returns a list of "reduction levels",
-    i.e. the number of bases per summary item, i.e. the bin size.
-
-    Parameters
-    ----------
-    inFile : str
-        Path to BigWig or BigBed file.
-
-    Returns
-    -------
-    list of int
-
-    """
-    with open(inFile) as f:
-        return f.zooms
-
-
-def info(str inFile):
-    """
-    Returns a dict of information about the bbi file.
-
-    Parameters
-    ----------
-    inFile : str
-        Path to BigWig or BigBed file.
-
-    Returns
-    -------
-    dict
-
-    """
-    with open(inFile) as f:
-        return f.info
-
-
-def fetch_intervals(
-    str inFile,
-    str chrom,
-    int start,
-    int end
-):
-    """
-    Return a generator that iterates over the records of data intervals in a
-    bbi file overlapping a specified genomic query interval.
-
-    Parameters
-    ----------
-    inFile : str
-        Path to BigWig or BigBed file.
-    chrom : str
-        Chromosome name.
-    start : int
-        Start coordinate.
-    end : int
-        End coordinate. If end is less than zero, the end is set to the
-        chromosome size.
-
-    Returns
-    -------
-    list
-        bedGraph or BED record
-
-    """
-    with open(inFile) as f:
-        return f.fetch_intervals(chrom, start, end)
-
-
-def fetch(
-    str inFile,
-    str chrom,
-    int start,
-    int end,
-    int bins=-1,
-    double missing=0.0,
-    double oob=np.nan,
-    str summary='mean'
-):
-    """
-    Read the signal data in a bbi file overlapping a genomic query interval
-    into a numpy array.
-
-    If a number of bins is requested, this will interpolate the file's stored
-    summary data from the closest available zoom level. Otherwise, the data
-    is returned at base pair resolution (default).
-
-    Parameters
-    ----------
-    inFile : str
-        Path to BigWig file.
-    chrom : str
-        Chromosome name.
-    start : int
-        Start coordinate. If start is less than zero, the beginning of the
-        track is not truncated but treated as out of bounds.
-    end : int
-        End coordinate. If end is less than zero, the end is set to the
-        chromosome size. If end is greater than the chromosome size, the end of
-        the track is not truncated but treated as out of bounds.
-    bins : int, optional
-        Number of bins to divide the query interval into for coarsegraining.
-        Default (-1) means no summarization (i.e., 1 bp bins).
-    missing : float, optional
-        Fill-in value for unreported data in valid regions. Default is 0.
-    oob : float, optional
-        Fill-in value for out-of-bounds regions. Default is NaN.
-    summary : str, optional
-        Summary statistic to use if summarizing. Options are 'mean', 'min',
-        'max', 'cov' (coverage), and 'std' (standard deviation). Default is
-        'mean'.
-
-    Returns
-    -------
-    out : 1D ndarray
-
-    Notes
-    -----
-    A BigWig file encodes a step function, and the value at a position
-    is given by the "value" field of the unique interval that contains that
-    position.
-
-    A BigBed file encodes a collection of (possibly overlapping) intervals,
-    and the value at a position is given by the coverage (i.e. pileup) of
-    intervals that contain that position.
-
-    """
-    with open(inFile) as f:
-        return f.fetch(chrom, start, end, bins, missing, oob, summary)
-
-
-def stackup(
-    str inFile,
-    chroms,
-    starts,
-    ends,
-    int bins=-1,
-    double missing=0.0,
-    double oob=np.nan,
-    str summary='mean'
-):
-    """
-    Vertically stack signal tracks from equal-length bbi query intervals.
-
-    Parameters
-    ----------
-    inFile : str
-        Path to BigWig file.
-    chrom : array-like of str
-        Chromosome names.
-    start : array-like of int
-        Start coordinates. If start is less than zero, the beginning of the
-        track is not truncated but treated as out of bounds.
-    end : array-like of int
-        End coordinates. If end is less than zero, the end is set to the
-        chromosome size. If end is greater than the chromosome size, the end of
-        the track is not truncated but treated as out of bounds.
-    bins : int
-        Number of bins to summarize the data. Default (-1) means no
-        aggregation.
-    missing : float
-        Fill-in value for unreported data in valid regions. Default is 0.
-    oob : float
-        Fill-in value for out-of-bounds regions. Default is NaN.
-    summary : str, optional
-        Summary statistic to use if summarizing. Options are 'mean', 'min',
-        'max', 'cov' (coverage), and 'std' (standard deviation). Default is
-        'mean'.
-
-    Returns
-    -------
-    out : 2D ndarray
-
-    See Also
-    --------
-    fetch : Fetch the signal track of a single interval
-
-    """
-    with open(inFile) as f:
-        return f.stackup(chroms, starts, ends, bins, missing, oob, summary)
 
 
 cdef inline void array_query_full(
