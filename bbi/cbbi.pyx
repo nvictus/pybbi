@@ -127,6 +127,10 @@ cdef bbiFile* _open(str inFile, bits32 sig) except *:
 
 cdef class BbiFile:
     """
+    Interface to a UCSC Big Binary (BBi) file.
+
+    The resource may be a bigWig or a bigBed file.
+    BigBed AutoSql schemas are supported.
 
     """
     cdef bbiFile *bbi
