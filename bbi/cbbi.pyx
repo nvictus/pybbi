@@ -301,7 +301,23 @@ cdef class BbiFile:
             raise OSError("File closed")
 
         if self.is_bigwig:
-            return None
+            return {
+                'name': 'bedGraph',
+                'comment': '',
+                'columns': ['chrom', 'start', 'end', 'value'],
+                'dtypes': {
+                    'chrom': 'object',
+                    'start': 'uint32',
+                    'end': 'uint32',
+                    'value': 'float32',
+                },
+                'description': {
+                    'chrom': 'Reference sequence chromosome or scaffold',
+                    'start': 'Start position in chromosome',
+                    'end': 'End position in chromosome',
+                    'value': 'Data value',
+                }
+            }
 
         # Try to read autosql definition string
         cdef char *cText = bigBedAutoSqlText(self.bbi)
@@ -524,18 +540,12 @@ cdef class BbiFile:
         # clean up
         lmCleanup(&lm)
 
-        if self.is_bigwig:
-            df = pd.DataFrame(ivals, columns=['chrom', 'start', 'end', 'value'])
-            df['start'] = df['start'].astype(int)
-            df['end'] = df['end'].astype(int)
-            df['value'] = df['value'].astype(float)
-        else:
-            df = pd.DataFrame(ivals, columns=self.autosql['columns'])
-            for col, dtype in self.autosql['dtypes'].items():
-                try:
-                    df[col] = df[col].astype(dtype)
-                except:
-                    pass
+        df = pd.DataFrame(ivals, columns=self.schema['columns'])
+        for col, dtype in self.schema['dtypes'].items():
+            try:
+                df[col] = df[col].astype(dtype)
+            except:
+                pass
 
         return df
 
