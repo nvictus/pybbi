@@ -38,38 +38,7 @@ cpdef dict BBI_SUMMARY_TYPES = {
 }
 
 
-# struct asTypeInfo
-#     {
-#     enum asTypes type;         /* Numeric ID of low level type. */
-#     char *name;                    /* Text ID of low level type. */
-#     bool isUnsigned;               /* True if an unsigned int of some type. */
-#     bool stringy;                  /* True if a string or blob. */
-#     char *sqlName;                 /* SQL type name. */
-#     char *cName;                   /* C type name. */
-#     char *listyName;               /* What functions that load a list are called. */
-#     char *nummyName;               /* What functions that load a number are called. */
-#     char *outFormat;           /* Output format for printf. %d, %u, etc. */
-#     char *djangoName;              /* Django type name */
-#     };
-# struct asTypeInfo asTypes[] = {
-#     {t_double,  "double",  FALSE, FALSE, "double",            "double",        "Double",   "Double",   "%g",   "FloatField"},
-#     {t_float,   "float",   FALSE, FALSE, "float",             "float",         "Float",    "Float",    "%g",   "FloatField"},
-#     {t_char,    "char",    FALSE, FALSE, "char",              "char",          "Char",     "Char",     "%c",   "CharField"},
-#     {t_int,     "int",     FALSE, FALSE, "int",               "int",           "Signed",   "Signed",   "%d",   "IntegerField"},
-#     {t_uint,    "uint",    TRUE,  FALSE, "int unsigned",      "unsigned",      "Unsigned", "Unsigned", "%u",   "PositiveIntegerField"},
-#     {t_short,   "short",   FALSE, FALSE, "smallint",          "short",         "Short",    "Signed",   "%d",   "SmallIntegerField"},
-#     {t_ushort,  "ushort",  TRUE,  FALSE, "smallint unsigned", "unsigned short","Ushort",   "Unsigned", "%u",   "SmallPositiveIntegerField"},
-#     {t_byte,    "byte",    FALSE, FALSE, "tinyint",           "signed char",   "Byte",     "Signed",   "%d",   "SmallIntegerField"},
-#     {t_ubyte,   "ubyte",   TRUE,  FALSE, "tinyint unsigned",  "unsigned char", "Ubyte",    "Unsigned", "%u",   "SmallPositiveIntegerField"},
-#     {t_off,     "bigint",  FALSE, FALSE, "bigint",            "long long",     "LongLong", "LongLong", "%lld", "BigIntegerField"},
-#     {t_string,  "string",  FALSE, TRUE,  "varchar(255)",      "char *",        "String",   "String",   "%s",   "CharField"},
-#     {t_lstring, "lstring", FALSE, TRUE,  "longblob",          "char *",        "String",   "String",   "%s",   "TextField"},
-#     {t_enum,    "enum",    FALSE, FALSE, "enum",              "!error!",       "Enum",     "Enum",     NULL,   "CharField"},
-#     {t_set,     "set",     FALSE, FALSE, "set",               "unsigned",      "Set",      "Set",      NULL,   NULL},
-#     {t_object,  "object",  FALSE, FALSE, "longblob",          "!error!",       "Object",   "Object",   NULL,   "TextField"},
-#     {t_object,  "table",   FALSE, FALSE, "longblob",          "!error!",       "Object",   "Object",   NULL,   "TextField"},
-#     {t_simple,  "simple",  FALSE, FALSE, "longblob",          "!error!",       "Simple",   "Simple",   NULL,   "TextField"},
-# };
+# Map AutoSql types to pandas-compatible dtypes
 # http://genomewiki.ucsc.edu/index.php/AutoSql
 cdef dict AUTOSQL_TYPE_MAP = {
     'string': 'object',   # varchar(255)
@@ -150,27 +119,27 @@ cdef double var_from_sums(double sum, double sumSquares, bits64 n):
     return var
 
 
-cdef inline int errCatchHandle(errCatch *e) except -1:
-    cdef bytes msg
-    if e.gotError:
-        msg = e.message.string if e.message != NULL else b''
-        raise RuntimeError('UCSC lib error\n{}'.format(msg.decode('utf-8')))
-    errCatchFree(e)
-    return 0
+# cdef inline int errCatchHandle(errCatch *e) except -1:
+#     cdef bytes msg
+#     if e.gotError:
+#         msg = e.message.string if e.message != NULL else b''
+#         raise RuntimeError('UCSC lib error\n{}'.format(msg.decode('utf-8')))
+#     errCatchFree(e)
+#     return 0
 
 
-cdef bbiFile* _open(str inFile, bits32 sig) except *:
-    # open the file
-    cdef bytes bInFile = inFile.encode('utf-8')
-    cdef errCatch *e = errCatchNew()
-    if errCatchStart(e):
-        if sig == bigWigSig:
-            bbi = bigWigFileOpen(bInFile)
-        else:
-            bbi = bigBedFileOpen(bInFile)
-    errCatchEnd(e)
-    errCatchHandle(e)
-    return bbi
+# cdef bbiFile* _open(str inFile, bits32 sig) except *:
+#     # open the file
+#     cdef bytes bInFile = inFile.encode('utf-8')
+#     cdef errCatch *e = errCatchNew()
+#     if errCatchStart(e):
+#         if sig == bigWigSig:
+#             bbi = bigWigFileOpen(bInFile)
+#         else:
+#             bbi = bigBedFileOpen(bInFile)
+#     errCatchEnd(e)
+#     errCatchHandle(e)
+#     return bbi
 
 
 def is_bbi(inFile):
@@ -257,8 +226,12 @@ cdef class BbiFile:
     cdef readonly bint is_bigbed
 
     def __cinit__(self, str inFile):
+        cdef bytes bInFile = inFile.encode('utf-8')
         self.sig = _check_sig(inFile)
-        self.bbi = _open(inFile, self.sig)
+        if self.sig == bigWigSig:
+            self.bbi = bigWigFileOpen(bInFile)
+        else:
+            self.bbi = bigBedFileOpen(bInFile)
         self.path = inFile
         self.is_remote = _is_url(inFile)
         self.is_bigwig = self.sig == bigWigSig
