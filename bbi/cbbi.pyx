@@ -13,20 +13,7 @@ import numpy as np
 from libc.math cimport sqrt
 from .cbbi cimport asObject
 
-
-if sys.version_info.major > 2:
-    bytes_to_int = int.from_bytes
-else:
-    from contextlib import closing
-    _urlopen = urlopen
-
-    def urlopen(*a, **kw):
-        return closing(_urlopen(*a, **kw))
-
-    def bytes_to_int(b, byteorder):
-        from struct import unpack
-        fmt = '<I' if byteorder == 'little' else '>I'
-        return unpack(fmt, b)[0]
+bytes_to_int = int.from_bytes
 
 
 cpdef dict BBI_SUMMARY_TYPES = {
@@ -205,13 +192,13 @@ def open(str inFile):
 
     Returns
     -------
-    BBiFile
+    BBIFile
 
     """
-    return BBiFile(inFile)
+    return BBIFile(inFile)
 
 
-cdef class BBiFile:
+cdef class BBIFile:
     """
     Interface to a UCSC Big Binary (BBi) file.
 
@@ -728,14 +715,14 @@ cdef class BBiFile:
 
 cdef class BigWigIntervalIterator:
     
-    cdef BBiFile fp
+    cdef BBIFile fp
     cdef str chrom
     cdef int valid_start
     cdef int valid_end
     cdef bbiInterval *interval
     cdef lm *lm
 
-    def __init__(self, BBiFile fp, bytes chromName, int validStart, int validEnd):
+    def __init__(self, BBIFile fp, bytes chromName, int validStart, int validEnd):
         if fp.closed:
             raise OSError("File closed")
         self.fp = fp
@@ -770,14 +757,14 @@ cdef class BigWigIntervalIterator:
 
 cdef class BigBedIntervalIterator:
     
-    cdef BBiFile fp
+    cdef BBIFile fp
     cdef str chrom
     cdef int valid_start
     cdef int valid_end
     cdef bigBedInterval *interval
     cdef lm *lm
 
-    def __init__(self, BBiFile fp, bytes chromName, int validStart, int validEnd):
+    def __init__(self, BBIFile fp, bytes chromName, int validStart, int validEnd):
         if fp.closed:
             raise OSError("File closed")
         self.fp = fp
