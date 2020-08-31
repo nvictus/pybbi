@@ -1,6 +1,6 @@
 # pybbi #
 
-Python interface to Jim Kent's big binary file (bbi) \[[1](#ref1)\] library from the [UCSC Genome Browser source tree](https://github.com/ucscGenomeBrowser/kent) using Cython.
+Python interface to Jim Kent's Big Binary Indexed file (BBI) \[[1](#ref1)\] library from the [UCSC Genome Browser source tree](https://github.com/ucscGenomeBrowser/kent) using Cython.
 
 This provides read-level access to local and remote bigWig and bigBed files but no write capabilitites. The main feature is fast retrieval of range queries into numpy arrays.
 
@@ -15,26 +15,55 @@ $ pip install pybbi
 
 ## API ##
 
+The `bbi.open` function returns a `BBIFile` object.
+
+```
+bbi.open(path) -> BBIFile
+```
+
+`path` can be a local file path (bigWig or bigBed) or a URL. `BBIFile` objects are context managers and can be used in a `with` statement to clean up resources without calling `BBIFile.close()`.
+
+```python
+>>> with bbi.open('bigWigExample.bw') as f:
+...     x = f.fetch('chr21', 1000000, 2000000, bins=40)
+```
+
 ### Introspection
 
-These accept a local file path or URL.
+```
+BBIFile.is_bigwig -> bool
+BBIFile.is_bigbed -> bool
+BBIFile.chromsizes -> OrderedDict
+BBIFile.zooms -> list
+BBIFile.info -> dict
+BBIFile.schema -> dict
+```
 
-- `bbi.is_bbi(path)` --> `bool`
-- `bbi.is_bigwig(path)` --> `bool`
-- `bbi.is_bigbed(path)` --> `bool`
-- `bbi.chromsizes(path)` --> `OrderedDict`
-- `bbi.zooms(path)` --> `list`
-- `bbi.info(path)` --> `dict`
+Note: `BBIFile.schema['dtypes']` provides numpy data types for the fields in a bigWig or bigBed (matched from the autoSql definition).
+
+
+### Interval output
+
+The actual intervals in a bigWig or bigBed can be retrieved as a pandas dataframe or as an iterator over records as tuples. The pandas output is parsed according to the file's schema.
+
+```
+BBIFile.fetch_intervals(chrom, start, end) -> pandas.DataFrame
+BBIFile.fetch_intervals(chrom, start, end, iterator=True) -> interval iterator
+```
 
 ### Array output
 
-These accept either a bigWig or bigBed file path / URL. The signal of a bigBed file is the genomic coverage of its intervals.
+Retrieve quantitative signal as an array. The signal of a bigWig file is obtained from its "value" field. The signal of a bigBed file is obtained from the genomic coverage of its intervals.
 
 For a single range query:
-- `bbi.fetch(path, chrom, start, end, [bins [, missing [, oob, [, summary]]]])` --> 1D numpy array
+```
+BBIFile.fetch(chrom, start, end, [bins [, missing [, oob, [, summary]]]]) -> 1D numpy array
+```
 
 For a list of equal-length segments (i.e. to produce a stacked heatmap):
-- `bbi.stackup(path, chroms, starts, ends, [bins [, missing [, oob, [, summary]]]])` --> 2D numpy array
+```
+BBIFile.stackup(chroms, starts, ends, [bins [, missing [, oob, [, summary]]]]) -> 2D numpy array
+```
 
 **Summary** querying is supported by specifying the number of `bins` for coarsegraining. The `summary` statistic can be one of: 'mean', 'min', 'max', 'cov', or 'std'. (default = 'mean').
 
@@ -42,11 +71,6 @@ For a list of equal-length segments (i.e. to produce a stacked heatmap):
 
 **Out-of-bounds** ranges (i.e. `start` less than zero or `end` greater than the chromosome length) are permitted because of their utility e.g., for generating vertical heatmap stacks centered at specific genomic features. A separate custom fill value, `oob` can be provided for out-of-bounds positions (default = NaN).
 
-### Interval output
-
-Accepts either a bigWig or bigBed file path / URL.
-
-- `bbi.fetch_intervals(path, chrom, start, end)` --> iterator
 
 See the docstrings for complete documentation.
 
