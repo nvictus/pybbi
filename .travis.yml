@@ -15,4 +15,4 @@ install:
 
 script:
   - ldd -r bbi/cbbi*.so
-  - pytest
+  - pytest -v

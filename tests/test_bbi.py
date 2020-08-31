@@ -136,7 +136,7 @@ def test_fetch_intervals(path):
         assert len(df) == 0
 
     with bbi.open(path) as f:
-        df = f.fetch_intervals('chr21', 0, 10000000)  # unmappable region
+        df = f.fetch_intervals('chr21', 0, 10000000)
         assert len(df) > 0
 
 
