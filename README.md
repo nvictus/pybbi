@@ -1,5 +1,7 @@
 # pybbi #
 
+[![Build Status](https://travis-ci.org/nvictus/pybbi.svg?branch=master)](https://travis-ci.org/nvictus/pybbi)
+
 Python interface to Jim Kent's Big Binary Indexed file (BBI) \[[1](#ref1)\] library from the [UCSC Genome Browser source tree](https://github.com/ucscGenomeBrowser/kent) using Cython.
 
 This provides read-level access to local and remote bigWig and bigBed files but no write capabilitites. The main feature is fast retrieval of range queries into numpy arrays.
@@ -37,6 +39,7 @@ BBIFile.chromsizes -> OrderedDict
 BBIFile.zooms -> list
 BBIFile.info -> dict
 BBIFile.schema -> dict
+BBIFile.read_autosql() -> str
 ```
 
 Note: `BBIFile.schema['dtypes']` provides numpy data types for the fields in a bigWig or bigBed (matched from the autoSql definition).
