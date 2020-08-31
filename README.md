@@ -65,12 +65,27 @@ For a list of equal-length segments (i.e. to produce a stacked heatmap):
 BBIFile.stackup(chroms, starts, ends, [bins [, missing [, oob, [, summary]]]]) -> 2D numpy array
 ```
 
-**Summary** querying is supported by specifying the number of `bins` for coarsegraining. The `summary` statistic can be one of: 'mean', 'min', 'max', 'cov', or 'std'. (default = 'mean').
+* **Summary** querying is supported by specifying the number of `bins` for coarsening. The `summary` statistic can be one of: 'mean', 'min', 'max', 'cov', or 'std'. (default = 'mean').
 
-**Missing** data can be filled with a custom fill value, `missing` (default = 0). 
+* **Missing** data can be filled with a custom fill value, `missing` (default = 0). 
 
-**Out-of-bounds** ranges (i.e. `start` less than zero or `end` greater than the chromosome length) are permitted because of their utility e.g., for generating vertical heatmap stacks centered at specific genomic features. A separate custom fill value, `oob` can be provided for out-of-bounds positions (default = NaN).
+* **Out-of-bounds** ranges (i.e. `start` less than zero or `end` greater than the chromosome length) are permitted because of their utility e.g., for generating vertical heatmap stacks centered at specific genomic features. A separate custom fill value, `oob` can be provided for out-of-bounds positions (default = NaN).
 
+### Function API
+
+The original function-based API is still available:
+
+```
+bbi.is_bbi(path) -> bool
+bbi.is_bigwig(path) -> bool
+bbi.is_bigbed(path) -> bool
+bbi.chromsizes(path) -> OrderedDict
+bbi.zooms(path) -> list
+bbi.info(path) -> dict
+bbi.fetch_intervals(path, chrom, start, end, iterator) -> interval iterator or pandas.DataFrame
+bbi.fetch(path, chrom, start, end, [bins [, missing [, oob, [, summary]]]]) -> 1D array
+bbi.stackup(path, chroms, starts, ends, [bins [, missing [, oob, [, summary]]]]) -> 2D array
+```
 
 See the docstrings for complete documentation.
 
