@@ -139,7 +139,6 @@ setup(
         'Operating System :: POSIX',
         'Operating System :: Unix',
         'Operating System :: MacOS',
-        'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
         'Topic :: Scientific/Engineering :: Bio-Informatics',
     ],
@@ -155,7 +154,8 @@ setup(
         'numpy'
     ],
     tests_require=[
-        'pytest'
+        'pytest',
+        'pandas'
     ],
     ext_modules=lazylist(get_ext_modules),
     cmdclass={

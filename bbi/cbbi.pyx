@@ -1,16 +1,17 @@
 #!python
 #cython: embedsignature=True
-from __future__ import division, print_function
 from six.moves.urllib.request import urlopen
 from six.moves.urllib.parse import urlparse
 from collections import OrderedDict
-import os.path
+import io
+import os.path as op
 import sys
+import warnings
 
 import numpy as np
-import cython
 
 from libc.math cimport sqrt
+from .cbbi cimport asObject
 
 
 if sys.version_info.major > 2:
@@ -28,38 +29,43 @@ else:
         return unpack(fmt, b)[0]
 
 
+cpdef dict BBI_SUMMARY_TYPES = {
+    'mean': bbiSumMean,
+    'max': bbiSumMax,
+    'min': bbiSumMin,
+    'cov': bbiSumCoverage,
+    'std': bbiSumStandardDeviation,
+    'sum': bbiSumSum,
+}
+
+
+# Map AutoSql types to pandas-compatible dtypes
+# http://genomewiki.ucsc.edu/index.php/AutoSql
+cdef dict AUTOSQL_TYPE_MAP = {
+    'string': 'object',   # varchar(255)
+    'char': 'object',     # char
+    'double': 'float64',  # double precision floating point.
+    'float': 'float32',   # single precision floating point.
+    'int': 'int32',       # signed 32 bit integer
+    'uint': 'uint32',     # unsigned 32 bit integer
+    'short': 'int16',     # signed 16 bit integer
+    'ushort': 'uint16',   # unsigned 16 bit integer
+    'byte': 'int8',       # signed 8 bit integer
+    'ubyte': 'uint8',     # unsigned 8 bit integer
+    'off': 'int64',       # 64 bit integer
+    'bigint': 'int64',    # 64 bit integer
+
+    # Exotic types will be treated as object for now
+    'lstring': 'object',  # longblob
+    'object': 'object',   # longblob
+    'simple': 'object',   # longblob
+    'enum': 'object',     # enum?
+    'set': 'object',      # set?
+}
+
+
 def _is_url(str uri):
     return urlparse(uri).scheme != ""
-
-
-def _read_magic(str uri):
-    cdef bytes magic_bytes
-    if not _is_url(uri):
-        if not os.path.isfile(uri):
-            raise OSError("File not found: {}".format(uri))
-        with open(uri, 'rb') as f:
-            magic_bytes = f.read(4)
-    else:
-        with urlopen(uri) as r:
-            code = r.getcode()
-            if code >= 400:
-                raise OSError("Status {}: Couldn't open {}".format(code, uri))
-            magic_bytes = r.read(4)
-        # if not _ucsc_may_open_url(uri):
-        #     raise RuntimeError("UCSC lib cannot open this URL")
-    return magic_bytes
-
-
-def _check_sig(str uri):
-    magic_bytes = _read_magic(uri)
-    if (bytes_to_int(magic_bytes, 'little') == bigWigSig or
-        bytes_to_int(magic_bytes, 'big') == bigWigSig):
-        return bigWigSig
-    elif (bytes_to_int(magic_bytes, 'little') == bigBedSig or
-          bytes_to_int(magic_bytes, 'big') == bigBedSig):
-        return bigBedSig
-    else:
-        return 0
 
 
 def _ucsc_may_open_url(str url):
@@ -72,17 +78,72 @@ def _ucsc_may_open_url(str url):
         return True
 
 
-cpdef dict BBI_SUMMARY_TYPES = {
-    'mean': bbiSumMean,
-    'max': bbiSumMax,
-    'min': bbiSumMin,
-    'cov': bbiSumCoverage,
-    'std': bbiSumStandardDeviation,
-    'sum': bbiSumSum,
-}
+def _read_magic(str uri):
+    cdef bytes magic_bytes
+    if not _is_url(uri):
+        if not op.isfile(uri):
+            raise OSError("File not found: {}".format(uri))
+        with io.open(uri, 'rb') as f:
+            magic_bytes = f.read(4)
+    else:
+        with urlopen(uri) as r:
+            code = r.getcode()
+            if code >= 400:
+                raise OSError("Status {}: Couldn't open {}".format(code, uri))
+            magic_bytes = r.read(4)
+    return magic_bytes
 
 
-def is_bbi(str inFile):
+def _read_sig(str uri):
+    magic_bytes = _read_magic(uri)
+    if (bytes_to_int(magic_bytes, 'little') == bigWigSig or
+        bytes_to_int(magic_bytes, 'big') == bigWigSig):
+        return bigWigSig
+    elif (bytes_to_int(magic_bytes, 'little') == bigBedSig or
+          bytes_to_int(magic_bytes, 'big') == bigBedSig):
+        return bigBedSig
+    else:
+        return 0
+
+
+def _check_sig(str uri):
+    cdef bits32 sig = _read_sig(uri)
+    if sig != bigWigSig and sig != bigBedSig:
+        raise OSError("Not a bbi file: {}".format(uri))
+    return sig
+
+
+cdef double var_from_sums(double sum, double sumSquares, bits64 n):
+    cdef double var = sumSquares - sum*sum/n
+    if n > 1:
+        var /= n - 1
+    return var
+
+
+# cdef inline int errCatchHandle(errCatch *e) except -1:
+#     cdef bytes msg
+#     if e.gotError:
+#         msg = e.message.string if e.message != NULL else b''
+#         raise RuntimeError('UCSC lib error\n{}'.format(msg.decode('utf-8')))
+#     errCatchFree(e)
+#     return 0
+
+
+# cdef bbiFile* _open(str inFile, bits32 sig) except *:
+#     # open the file
+#     cdef bytes bInFile = inFile.encode('utf-8')
+#     cdef errCatch *e = errCatchNew()
+#     if errCatchStart(e):
+#         if sig == bigWigSig:
+#             bbi = bigWigFileOpen(bInFile)
+#         else:
+#             bbi = bigBedFileOpen(bInFile)
+#     errCatchEnd(e)
+#     errCatchHandle(e)
+#     return bbi
+
+
+def is_bbi(inFile):
     """
     Returns True if `inFile` is a path or URL to a big binary file.
 
@@ -96,10 +157,10 @@ def is_bbi(str inFile):
     bool
 
     """
-    return _check_sig(inFile) > 0
+    return _read_sig(inFile) > 0
 
 
-def is_bigwig(str inFile):
+def is_bigwig(inFile):
     """
     Returns True if `inFile` is a path or URL to a BigWig binary file.
 
@@ -113,10 +174,10 @@ def is_bigwig(str inFile):
     bool
 
     """
-    return _check_sig(inFile) == bigWigSig
+    return _read_sig(inFile) == bigWigSig
 
 
-def is_bigbed(str inFile):
+def is_bigbed(inFile):
     """
     Returns True if `inFile` is a path or URL to a BigBed binary file.
 
@@ -130,492 +191,642 @@ def is_bigbed(str inFile):
     bool
 
     """
-    return _check_sig(inFile) == bigBedSig
+    return _read_sig(inFile) == bigBedSig
 
 
-def chromsizes(str inFile):
+def open(str inFile):
     """
-    Fetch the chromosome list of a bbi file. Returns an ordered dictionary of
-    chromosome names mapped to their sizes in bp.
+    Open a big binary file.
 
     Parameters
     ----------
     inFile : str
-        Path to BigWig or BigBed file.
+        File path or URL
 
     Returns
     -------
-    OrderedDict (str -> int)
+    BBiFile
 
     """
-    # open the file
-    cdef bits32 sig = _check_sig(inFile)
-    cdef bytes bInFile = inFile.encode('utf-8')
+    return BBiFile(inFile)
+
+
+cdef class BBiFile:
+    """
+    Interface to a UCSC Big Binary (BBi) file.
+
+    The resource may be a bigWig or a bigBed file.
+    BigBed AutoSql schemas are supported.
+
+    """
     cdef bbiFile *bbi
-    if sig == bigWigSig:
-        bbi = bigWigFileOpen(bInFile)
-    elif sig == bigBedSig:
-        bbi = bigBedFileOpen(bInFile)
-    else:
-        raise OSError("Not a bbi file: {}".format(inFile))
+    cdef bits32 sig
+    cdef readonly str path
+    cdef readonly bint is_remote
+    cdef readonly bint is_bigwig
+    cdef readonly bint is_bigbed
 
-    # traverse the chromosome list
-    # chromList is allocated
-    cdef bbiChromInfo *chromList = bbiChromList(bbi)
-    cdef bbiChromInfo *info = chromList
-    cdef list c_list = []
-    while info != NULL:
-        c_list.append((<bytes>(info.name).decode('ascii'), info.size))
-        info = info.next
+    def __cinit__(self, str inFile):
+        cdef bytes bInFile = inFile.encode('utf-8')
+        self.sig = _check_sig(inFile)
+        if self.sig == bigWigSig:
+            self.bbi = bigWigFileOpen(bInFile)
+        else:
+            self.bbi = bigBedFileOpen(bInFile)
+        self.path = inFile
+        self.is_remote = _is_url(inFile)
+        self.is_bigwig = self.sig == bigWigSig
+        self.is_bigbed = self.sig == bigBedSig
 
-    # clean up
-    bbiChromInfoFreeList(&chromList)
-    bbiFileClose(&bbi)
+    def __dealloc__(self):
+        if self.bbi != NULL:
+            bbiFileClose(&self.bbi)
 
-    return OrderedDict(c_list)
+    def __enter__(self):
+        return self
 
+    def __exit__(self, typ, val, tb):
+        self.close()
 
-def zooms(str inFile):
-    """
-    Fetch the zoom levels of a bbi file. Returns a list of "reduction levels",
-    i.e. the number of bases per summary item, i.e. the bin size.
+    def close(self):
+        if self.bbi != NULL:
+            bbiFileClose(&self.bbi)
 
-    Parameters
-    ----------
-    inFile : str
-        Path to BigWig or BigBed file.
+    @property
+    def closed(self):
+        return self.bbi == NULL
 
-    Returns
-    -------
-    list of int
+    def read_autosql(self):
+        if self.bbi == NULL:
+            raise OSError("File closed")
 
-    """
-    # open the file
-    cdef bits32 sig = _check_sig(inFile)
-    cdef bytes bInFile = inFile.encode('utf-8')
-    cdef bbiFile *bbi
-    if sig == bigWigSig:
-        bbi = bigWigFileOpen(bInFile)
-    elif sig == bigBedSig:
-        bbi = bigBedFileOpen(bInFile)
-    else:
-        raise OSError("Not a bbi file: {}".format(inFile))
+        if self.is_bigwig:
+            return None
 
-    # traverse the zoom list
-    cdef bbiZoomLevel *zoom = bbi.levelList
-    cdef list z_list = []
-    while zoom != NULL:
-        z_list.append(zoom.reductionLevel)
-        zoom = zoom.next
+        # Try to read autosql definition string
+        cdef char *cText = bigBedAutoSqlText(self.bbi)
+        if cText == NULL:
+            # Use default autosql BED definition based on number of fields
+            cText = bedAsDef(self.bbi.definedFieldCount, self.bbi.fieldCount)
+        cdef str raw_text = (<bytes>cText).decode('ascii')
+        freeMem(cText)
 
-    # clean up
-    bbiFileClose(&bbi)
+        return raw_text
 
-    return z_list
+    @property
+    def schema(self):
+        if self.bbi == NULL:
+            raise OSError("File closed")
 
+        if self.is_bigwig:
+            return {
+                'name': 'bedGraph',
+                'comment': '',
+                'columns': ['chrom', 'start', 'end', 'value'],
+                'dtypes': {
+                    'chrom': 'object',
+                    'start': 'uint32',
+                    'end': 'uint32',
+                    'value': 'float32',
+                },
+                'description': {
+                    'chrom': 'Reference sequence chromosome or scaffold',
+                    'start': 'Start position in chromosome',
+                    'end': 'End position in chromosome',
+                    'value': 'Data value',
+                }
+            }
 
-def info(str inFile):
-    """
-    Returns a dict of information about the bbi file.
+        # Try to read autosql definition string
+        cdef char *cText = bigBedAutoSqlText(self.bbi)
+        if cText == NULL:
+            # Use default autosql BED definition based on number of fields
+            cText = bedAsDef(self.bbi.definedFieldCount, self.bbi.fieldCount)
 
-    Parameters
-    ----------
-    inFile : str
-        Path to BigWig or BigBed file.
+        # Parse definition string into an object and free the string
+        # cdef str raw_text = (<bytes>cText).decode('ascii')
+        cdef asObject *o = asParseText(cText)
 
-    Returns
-    -------
-    dict
+        # Extract metadata
+        cdef str as_name = (<bytes>(o.name)).decode('ascii')
+        cdef str comment = (<bytes>(o.comment)).decode('ascii')
 
-    """
-    # open the file
-    cdef bits32 sig = _check_sig(inFile)
-    cdef bytes bInFile = inFile.encode('utf-8')
-    cdef bbiFile *bbi
-    if sig == bigWigSig:
-        bbi = bigWigFileOpen(bInFile)
-    elif sig == bigBedSig:
-        bbi = bigBedFileOpen(bInFile)
-    else:
-        raise OSError("Not a bbi file: {}".format(inFile))
+        # Extract column definitions
+        cdef asColumn *col = o.columnList
+        cdef asTypeInfo *typ
+        cdef str name, t_name, d_name
+        cdef list columns = []
+        cdef dict dtypes = {}
+        cdef dict describe = {}
+        while col != NULL:
 
-    cdef bbiSummaryElement summ = bbiTotalSummary(bbi)
-    d = {
-        'version': bbi.version,
-        'isCompressed': bbi.uncompressBufSize > 0,
-        'isSwapped': bbi.isSwapped,
-        'primaryDataSize': bbi.unzoomedIndexOffset - bbi.unzoomedDataOffset,
-        'zoomLevels': bbi.zoomLevels,
-        'chromCount': len(chromsizes(inFile)),
-        'summary': {
-            'basesCovered': summ.validCount,
-            'mean': summ.sumData / summ.validCount,
-            'min': summ.minVal,
-            'max': summ.maxVal,
-            'std': sqrt(var_from_sums(summ.sumData,
-                                      summ.sumSquares,
-                                      summ.validCount)),
-            'sum': summ.sumData,
+            # field name
+            typ = col.lowType
+            name = (<bytes>(col.name)).decode('ascii')
+            if name in ('chromStart', 'chromEnd'):
+                name = name[5:].lower()
+            columns.append(name)
+
+            # field dtype
+            if col.isList or col.isArray:
+                dtypes[name] = 'object'
+            elif name != 'reserved':
+                t_name = (<bytes>(typ.name)).decode('ascii')
+                if t_name in AUTOSQL_TYPE_MAP:
+                    dtypes[name] = AUTOSQL_TYPE_MAP[t_name]
+                else:
+                    dtypes[name] = 'object'
+
+            # field description
+            d_name = (<bytes>(col.comment)).decode('ascii')
+            describe[name] = d_name
+
+            col = col.next
+
+        # Clean up
+        freeMem(cText)
+        asObjectFree(&o)
+
+        return {
+            'name': as_name,
+            'comment': comment,
+            'columns': columns,
+            'dtypes': dtypes,
+            'description': describe,
         }
-    }
-    bbiFileClose(&bbi)
 
-    return d
+    @property
+    def chromsizes(self):
+        """
+        An ordered dictionary of chromosome names mapped to their sizes in bp.
 
+        """
+        if self.bbi == NULL:
+            raise OSError("File closed")
 
-def fetch_intervals(
-        str inFile,
-        str chrom,
-        int start,
-        int end):
-    """
-    Return a generator that iterates over the records of data intervals in a
-    bbi file overlapping a specified genomic query interval.
+        # traverse the chromosome list
+        cdef bbiChromInfo *chromList = bbiChromList(self.bbi)
+        cdef bbiChromInfo *info = chromList
+        cdef list c_list = []
+        while info != NULL:
+            c_list.append((<bytes>(info.name).decode('ascii'), info.size))
+            info = info.next
 
-    Parameters
-    ----------
-    inFile : str
-        Path to BigWig or BigBed file.
-    chrom : str
-        Chromosome name.
-    start : int
-        Start coordinate.
-    end : int
-        End coordinate. If end is less than zero, the end is set to the
-        chromosome size.
+        # clean up
+        bbiChromInfoFreeList(&chromList)
 
-    Yields
-    ------
-    tuple
-        bedGraph or BED record
+        return OrderedDict(c_list)
 
-    """
-    # open the file
-    cdef bits32 sig = _check_sig(inFile)
-    cdef bytes bInFile = inFile.encode('utf-8')
-    cdef bbiFile *bbi
-    if sig == bigWigSig:
-        bbi = bigWigFileOpen(bInFile)
-    elif sig == bigBedSig:
-        bbi = bigBedFileOpen(bInFile)
-    else:
-        raise OSError("Not a bbi file: {}".format(inFile))
+    @property
+    def zooms(self):
+        """
+        A list of "reduction levels" (bin sizes), i.e. the number of bases per
+        summary item.
 
-    # find the chromosome
-    cdef bytes chromName = chrom.encode('ascii')
-    cdef int chromSize = bbiChromSize(bbi, chromName)
-    if chromSize == 0:
-        bbiFileClose(&bbi)
-        raise KeyError("Chromosome not found: {}".format(chrom))
+        """
+        if self.bbi == NULL:
+            raise OSError("File closed")
 
-    # check the coordinates
-    if end < 0:
-        end = chromSize
-    if start > chromSize:
-        bbiFileClose(&bbi)
-        raise ValueError(
-            "Start exceeds the chromosome length, {}.".format(chromSize))
-    cdef length = end - start
-    if length < 0:
-        bbiFileClose(&bbi)
-        raise ValueError(
-            "Interval cannot have negative length:"
-            " start = {}, end = {}.".format(start, end))
+        # traverse the zoom list
+        cdef bbiZoomLevel *zoom = self.bbi.levelList
+        cdef list z_list = []
+        while zoom != NULL:
+            z_list.append(zoom.reductionLevel)
+            zoom = zoom.next
 
-    # clip the query range
-    cdef int validStart = start, validEnd = end
-    if start < 0:
-        validStart = 0
-    if end > chromSize:
-        validEnd = chromSize
+        return z_list
 
-    # query
-    # interval list is allocated out of lm
-    cdef lm *lm = lmInit(0)
-    cdef bbiInterval *bwInterval
-    cdef bigBedInterval *bbInterval
-    cdef tuple restTup
-    cdef char *cRest = NULL
-    cdef bytes bRest
-    cdef str rest
-    if sig == bigWigSig:
-        bwInterval = bigWigIntervalQuery(bbi, chromName, validStart, validEnd, lm)
-        while bwInterval != NULL:
-            yield (chrom, bwInterval.start, bwInterval.end, bwInterval.val)
-            bwInterval = bwInterval.next
-    else:
-        bbInterval = bigBedIntervalQuery(bbi, chromName, validStart, validEnd, 0, lm)
-        while bbInterval != NULL:
-            cRest = bbInterval.rest
-            if cRest != NULL:
-                bRest = cRest
-                rest = bRest.decode('ascii')
-                restTup = tuple(rest.split('\t'))
-            else:
-                restTup = ()
-            yield (chrom, bbInterval.start, bbInterval.end) + restTup
-            bbInterval = bbInterval.next
+    @property
+    def info(self):
+        """
+        A dict of information about the bbi file.
 
-    # clean up
-    lmCleanup(&lm)
-    bbiFileClose(&bbi)
+        """
+        if self.bbi == NULL:
+            raise OSError("File closed")
 
+        cdef bbiSummaryElement summ = bbiTotalSummary(self.bbi)
 
-def fetch(
-        str inFile,
+        return {
+            'version': self.bbi.version,
+            'isCompressed': self.bbi.uncompressBufSize > 0,
+            'isSwapped': self.bbi.isSwapped,
+            'primaryDataSize': self.bbi.unzoomedIndexOffset - self.bbi.unzoomedDataOffset,
+            'zoomLevels': self.bbi.zoomLevels,
+            'chromCount': len(self.chromsizes),
+            'summary': {
+                'basesCovered': summ.validCount,
+                'sum': summ.sumData,
+                'mean': summ.sumData / summ.validCount,
+                'min': summ.minVal,
+                'max': summ.maxVal,
+                'std': sqrt(var_from_sums(summ.sumData,
+                                          summ.sumSquares,
+                                          summ.validCount)),
+            }
+        }
+
+    def fetch(
+        self,
         str chrom,
         int start,
         int end,
         int bins=-1,
         double missing=0.0,
         double oob=np.nan,
-        str summary='mean'):
-    """
-    Read the signal data in a bbi file overlapping a genomic query interval
-    into a numpy array.
+        str summary='mean'
+    ):
+        """
+        Read the signal data in a bbi file overlapping a genomic query interval
+        into a numpy array.
 
-    If a number of bins is requested, this will interpolate the file's stored
-    "summary" data at the closest available zoom level. Otherwise, the data
-    is returned at base pair resolution (default).
+        If a number of bins is requested, this will interpolate the file's stored
+        summary data from the closest available zoom level. Otherwise, the data
+        is returned at base pair resolution (default).
 
-    Parameters
-    ----------
-    inFile : str
-        Path to BigWig file.
-    chrom : str
-        Chromosome name.
-    start : int
-        Start coordinate. If start is less than zero, the beginning of the
-        track is not truncated but treated as out of bounds.
-    end : int
-        End coordinate. If end is less than zero, the end is set to the
-        chromosome size. If end is greater than the chromosome size, the end of
-        the track is not truncated but treated as out of bounds.
-    bins : int, optional
-        Number of bins to divide the query interval into for coarsegraining.
-        Default (-1) means no summarization (i.e., 1 bp bins).
-    missing : float, optional
-        Fill-in value for unreported data in valid regions. Default is 0.
-    oob : float, optional
-        Fill-in value for out-of-bounds regions. Default is NaN.
-    summary : str, optional
-        Summary statistic to use if summarizing. Options are 'mean', 'min',
-        'max', 'cov' (coverage), and 'std' (standard deviation). Default is
-        'mean'.
+        Parameters
+        ----------
+        chrom : str
+            Chromosome name.
+        start : int
+            Start coordinate. If start is less than zero, the beginning of the
+            track is not truncated but treated as out of bounds.
+        end : int
+            End coordinate. If end is less than zero, the end is set to the
+            chromosome size. If end is greater than the chromosome size, the end of
+            the track is not truncated but treated as out of bounds.
+        bins : int, optional
+            Number of bins to divide the query interval into for coarsegraining.
+            Default (-1) means no summarization (i.e., 1 bp bins).
+        missing : float, optional
+            Fill-in value for unreported data in valid regions. Default is 0.
+        oob : float, optional
+            Fill-in value for out-of-bounds regions. Default is NaN.
+        summary : str, optional
+            Summary statistic to use if summarizing. Options are 'mean', 'min',
+            'max', 'cov' (coverage), and 'std' (standard deviation). Default is
+            'mean'.
 
-    Returns
-    -------
-    out : 1D ndarray
+        Returns
+        -------
+        1D ndarray
 
-    Notes
-    -----
-    * The signal data for a BigBed file is its coverage.
-    * Currently, the only summary statistic supported is 'mean'.
+        Notes
+        -----
+        A BigWig file encodes a step function, and the value at a base
+        is given by the "value" field of the unique interval that contains that
+        base.
 
-    """
-    # open the file
-    cdef bits32 sig = _check_sig(inFile)
-    cdef bytes bInFile = inFile.encode('utf-8')
-    cdef bbiFile *bbi
-    cdef BbiFetchIntervals fetcher
-    if sig == bigWigSig:
-        bbi = bigWigFileOpen(bInFile)
-        fetcher = bigWigIntervalQuery
-    elif sig == bigBedSig:
-        bbi = bigBedFileOpen(bInFile)
-        fetcher = bigBedCoverageIntervals
-    else:
-        raise OSError("Not a bbi file: {}".format(inFile))
+        A BigBed file encodes a collection of (possibly overlapping) intervals,
+        and the value at a base is given by the coverage (i.e. pileup) of
+        intervals that contain that base.
 
-    # find the chromosome
-    cdef bytes chromName = chrom.encode('ascii')
-    cdef int chromSize = bbiChromSize(bbi, chromName)
-    if chromSize == 0:
-        bbiFileClose(&bbi)
-        raise KeyError("Chromosome not found: {}".format(chrom))
+        """
+        if self.bbi == NULL:
+            raise OSError("File closed")
 
-    # check the coordinates
-    if end < 0:
-        end = chromSize
-    if start > chromSize:
-        bbiFileClose(&bbi)
-        raise ValueError(
-            "Start exceeds the chromosome length, {}.".format(chromSize))
-    cdef length = end - start
-    if length < 0:
-        bbiFileClose(&bbi)
-        raise ValueError(
-            "Interval cannot have negative length:"
-            " start = {}, end = {}.".format(start, end))
+        cdef BbiFetchIntervals fetcher
+        if self.is_bigwig:
+            fetcher = bigWigIntervalQuery
+        elif self.is_bigbed:
+            fetcher = bigBedCoverageIntervals
 
-    # prepare the output
-    cdef boolean is_summary = True
-    if bins < 1:
-        is_summary = False
-        bins = length
+        # find the chromosome
+        cdef bytes chromName = chrom.encode('ascii')
+        cdef int chromSize = bbiChromSize(self.bbi, chromName)
+        if chromSize == 0:
+            raise KeyError("Chromosome not found: {}".format(chrom))
 
-    cdef np.ndarray[np.double_t, ndim=1] out = np.empty(bins, dtype=float)
-    out[:] = missing
-
-    # query
-    cdef bbiSummaryType summary_type
-    if is_summary:
-        try:
-            summary_type = BBI_SUMMARY_TYPES[summary]
-        except KeyError:
-            bbiFileClose(&bbi)
+        # check the coordinates
+        if end < 0:
+            end = chromSize
+        if start > chromSize:
             raise ValueError(
-                'Invalid summary type "{}". Must be one of: {}.'.format(
-                    summary,
-                    set(BBI_SUMMARY_TYPES.keys())))
-        array_query_summarized(
-            out, bins, bbi, fetcher,
-            chromName, start, end, chromSize, oob, summary_type)
-    else:
-        array_query_full(
-            out, bins, bbi, fetcher,
-            chromName, start, end, chromSize, oob)
+                "Start exceeds the chromosome length, {}.".format(chromSize))
+        cdef length = end - start
+        if length < 0:
+            raise ValueError(
+                "Interval cannot have negative length:"
+                " start = {}, end = {}.".format(start, end))
 
-    # clean up
-    bbiFileClose(&bbi)
+        # prepare the output
+        cdef boolean is_summary = True
+        if bins < 1:
+            is_summary = False
+            bins = length
 
-    return out
+        cdef np.ndarray[np.double_t, ndim=1] out = np.empty(bins, dtype=float)
+        out[:] = missing
 
+        # query
+        cdef bbiSummaryType summary_type
+        if is_summary:
+            try:
+                summary_type = BBI_SUMMARY_TYPES[summary]
+            except KeyError:
+                raise ValueError(
+                    'Invalid summary type "{}". Must be one of: {}.'.format(
+                        summary,
+                        set(BBI_SUMMARY_TYPES.keys())))
+            array_query_summarized(
+                out, bins, self.bbi, fetcher,
+                chromName, start, end, chromSize, oob, summary_type)
+        else:
+            array_query_full(
+                out, bins, self.bbi, fetcher,
+                chromName, start, end, chromSize, oob)
 
-def stackup(
-        str inFile,
+        return out
+
+    def stackup(
+        self,
         chroms,
         starts,
         ends,
         int bins=-1,
         double missing=0.0,
         double oob=np.nan,
-        str summary='mean'):
-    """
-    Vertically stack signal tracks from equal-length bbi query intervals.
+        str summary='mean'
+    ):
+        """
+        Vertically stack signal tracks from equal-length bbi query intervals.
 
-    Parameters
-    ----------
-    inFile : str
-        Path to BigWig file.
-    chrom : array-like of str
-        Chromosome names.
-    start : array-like of int
-        Start coordinates. If start is less than zero, the beginning of the
-        track is not truncated but treated as out of bounds.
-    end : array-like of int
-        End coordinates. If end is less than zero, the end is set to the
-        chromosome size. If end is greater than the chromosome size, the end of
-        the track is not truncated but treated as out of bounds.
-    bins : int
-        Number of bins to summarize the data. Default (-1) means no
-        aggregation.
-    missing : float
-        Fill-in value for unreported data in valid regions. Default is 0.
-    oob : float
-        Fill-in value for out-of-bounds regions. Default is NaN.
-    summary : str, optional
-        Summary statistic to use if summarizing. Options are 'mean', 'min',
-        'max', 'cov' (coverage), and 'std' (standard deviation). Default is
-        'mean'.
+        Parameters
+        ----------
+        chrom : array-like of str
+            Chromosome names.
+        start : array-like of int
+            Start coordinates. If start is less than zero, the beginning of the
+            track is not truncated but treated as out of bounds.
+        end : array-like of int
+            End coordinates. If end is less than zero, the end is set to the
+            chromosome size. If end is greater than the chromosome size, the end of
+            the track is not truncated but treated as out of bounds.
+        bins : int
+            Number of bins to summarize the data. Default (-1) means no
+            aggregation.
+        missing : float
+            Fill-in value for unreported data in valid regions. Default is 0.
+        oob : float
+            Fill-in value for out-of-bounds regions. Default is NaN.
+        summary : str, optional
+            Summary statistic to use if summarizing. Options are 'mean', 'min',
+            'max', 'cov' (coverage), and 'std' (standard deviation). Default is
+            'mean'.
 
-    Returns
-    -------
-    out : 2D ndarray
+        Returns
+        -------
+        out : 2D ndarray
 
-    See Also
-    --------
-    fetch : Fetch the signal track of a single interval
+        See Also
+        --------
+        fetch : Fetch the signal track of a single interval
 
-    """
-    cdef np.ndarray[object, ndim=1] chroms_ = np.asarray(chroms, dtype=object)
-    cdef np.ndarray[np.int_t, ndim=1] starts_ = np.asarray(starts, dtype=int)
-    cdef np.ndarray[np.int_t, ndim=1] ends_ = np.asarray(ends, dtype=int)
-    if len(chroms_) != len(starts_) or len(starts_) != len(ends_):
-        raise ValueError(
-            "`chroms`, `starts`, and `ends` must have the same length")
+        """
+        if self.bbi == NULL:
+            raise OSError("File closed")
 
-    # open the file
-    cdef bits32 sig = _check_sig(inFile)
-    cdef bytes bInFile = inFile.encode('utf-8')
-    cdef bbiFile *bbi
-    cdef BbiFetchIntervals fetcher
-    if sig == bigWigSig:
-        bbi = bigWigFileOpen(bInFile)
-        fetcher = bigWigIntervalQuery
-    elif sig == bigBedSig:
-        bbi = bigBedFileOpen(bInFile)
-        fetcher = bigBedCoverageIntervals
-    else:
-        raise OSError("Not a bbi file: {}".format(inFile))
+        cdef np.ndarray[object, ndim=1] chroms_ = np.asarray(chroms, dtype=object)
+        cdef np.ndarray[np.int_t, ndim=1] starts_ = np.asarray(starts, dtype=int)
+        cdef np.ndarray[np.int_t, ndim=1] ends_ = np.asarray(ends, dtype=int)
+        if bins < 0 and (len(chroms_) != len(starts_) or len(starts_) != len(ends_)):
+            raise ValueError(
+                "`chroms`, `starts`, and `ends` must have the same length"
+            )
 
-    # check the coordinate inputs
-    if bins < 0 and len(np.unique(ends_ - starts_)) != 1:
-        bbiFileClose(&bbi)
-        raise ValueError(
-            "Query windows must have equal size if `bins` is not specified."
-        )
+        cdef BbiFetchIntervals fetcher
+        if self.is_bigwig:
+            fetcher = bigWigIntervalQuery
+        elif self.is_bigbed:
+            fetcher = bigBedCoverageIntervals
 
-    # prepare output
-    cdef int length = ends_[0] - starts_[0]
-    cdef int n = chroms_.shape[0]
-    if bins < 1:
-        bins = length
-    cdef np.ndarray[np.double_t, ndim=2] out = np.empty((n, bins), dtype=float)
-    out[:, :] = missing
+        # check the coordinate inputs
+        if bins < 0 and len(np.unique(ends_ - starts_)) != 1:
+            raise ValueError(
+                "Query windows must have equal size if `bins` is not specified."
+            )
 
-    # query
-    cdef bytes chromName
-    cdef int chromSize
-    cdef int start, end
-    cdef Py_ssize_t i
-    cdef bbiSummaryType summary_type
-    for i in range(n):
-        chromName = chroms_[i].encode('ascii')
-        chromSize = bbiChromSize(bbi, chromName)
+        # prepare output
+        cdef int length = ends_[0] - starts_[0]
+        cdef int n = chroms_.shape[0]
+        if bins < 1:
+            bins = length
+        cdef np.ndarray[np.double_t, ndim=2] out = np.empty((n, bins), dtype=float)
+        out[:, :] = missing
+
+        # query
+        cdef bytes chromName
+        cdef int chromSize
+        cdef int start, end
+        cdef Py_ssize_t i
+        cdef bbiSummaryType summary_type
+        for i in range(n):
+            chromName = chroms_[i].encode('ascii')
+            chromSize = bbiChromSize(self.bbi, chromName)
+            if chromSize == 0:
+                raise KeyError("Chromosome not found: {}".format(chroms_[i]))
+            start = starts_[i]
+            end = ends_[i]
+            if start > chromSize:
+                raise ValueError(
+                    "Start exceeds the chromosome length, {}.".format(chromSize))
+            if bins < 1:
+                array_query_full(
+                    out[i, :], bins, self.bbi, fetcher,
+                    chromName, start, end, chromSize, oob
+                )
+            else:
+                try:
+                    summary_type = BBI_SUMMARY_TYPES[summary]
+                except KeyError:
+                    raise ValueError(
+                        'Invalid summary type "{}". Must be one of: {}.'.format(
+                            summary,
+                            set(BBI_SUMMARY_TYPES.keys()))
+                        )
+                array_query_summarized(
+                    out[i, :], bins, self.bbi, fetcher,
+                    chromName, start, end, chromSize, oob, summary_type
+                )
+        return out
+
+    def fetch_intervals(self, str chrom, int start, int end, bint iterator=False):
+        """
+        Return an iterator or data frame of feature intervals overlapping a 
+        specified genomic query interval.
+
+        Parameters
+        ----------
+        chrom : str
+            Chromosome name.
+        start : int
+            Start coordinate.
+        end : int
+            End coordinate. If end is less than zero, the end is set to the
+            chromosome size.
+        iterator : bool, optional
+            If True, return an iterator that provides records as tuples. For 
+            bigBeds, extra BED fields will be returned as unparsed strings. If 
+            False, return a DataFrame with all columns parsed according to the 
+            file's autosql schema.
+
+        Returns
+        -------
+        pandas.DataFrame or BigWigIntervalIterator or BigBedIntervalIterator
+
+        """
+        if self.bbi == NULL:
+            raise OSError("File closed")
+
+        # find the chromosome
+        cdef bytes chromName = chrom.encode('ascii')
+        cdef int chromSize = bbiChromSize(self.bbi, chromName)
         if chromSize == 0:
-            bbiFileClose(&bbi)
-            raise KeyError("Chromosome not found: {}".format(chroms_[i]))
-        start = starts_[i]
-        end = ends_[i]
+            raise KeyError("Chromosome not found: {}".format(chrom))
+
+        # check the coordinates
+        if end < 0:
+            end = chromSize
         if start > chromSize:
-            bbiFileClose(&bbi)
             raise ValueError(
                 "Start exceeds the chromosome length, {}.".format(chromSize))
-        if bins < 1:
-            array_query_full(
-                out[i, :], bins, bbi, fetcher,
-                chromName, start, end, chromSize, oob)
+        cdef length = end - start
+        if length < 0:
+            raise ValueError(
+                "Interval cannot have negative length:"
+                " start = {}, end = {}.".format(start, end))
+
+        # clip the query range
+        cdef int validStart = start, validEnd = end
+        if start < 0:
+            validStart = 0
+        if end > chromSize:
+            validEnd = chromSize
+
+        if self.is_bigwig:
+            it = BigWigIntervalIterator(self, chromName, validStart, validEnd)
+        else:
+            it = BigBedIntervalIterator(self, chromName, validStart, validEnd)
+
+        if iterator:
+            return it
         else:
             try:
-                summary_type = BBI_SUMMARY_TYPES[summary]
-            except KeyError:
-                bbiFileClose(&bbi)
-                raise ValueError(
-                    'Invalid summary type "{}". Must be one of: {}.'.format(
-                        summary,
-                        set(BBI_SUMMARY_TYPES.keys())))
-            array_query_summarized(
-                out[i, :], bins, bbi, fetcher,
-                chromName, start, end, chromSize, oob, summary_type)
+                import pandas as pd
+            except ImportError:
+                raise ImportError("fetch_intervals requires pandas")
 
-    # clean up
-    bbiFileClose(&bbi)
+            df = pd.DataFrame(list(it), columns=self.schema['columns'])
+            for col, dtype in self.schema['dtypes'].items():
+                try:
+                    df[col] = df[col].astype(dtype)
+                except:
+                    pass
 
-    return out
+        return df
+
+
+cdef class BigWigIntervalIterator:
+    
+    cdef BBiFile fp
+    cdef str chrom
+    cdef int valid_start
+    cdef int valid_end
+    cdef bbiInterval *interval
+    cdef lm *lm
+
+    def __init__(self, BBiFile fp, bytes chromName, int validStart, int validEnd):
+        if fp.closed:
+            raise OSError("File closed")
+        self.fp = fp
+        self.chrom = chromName.decode('ascii')
+        self.valid_start = validStart
+        self.valid_end = validEnd
+
+        # interval list is allocated out of lm
+        self.lm = lmInit(0)
+        self.interval = bigWigIntervalQuery(
+            self.fp.bbi, chromName, validStart, validEnd, self.lm
+        )
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.interval == NULL:
+            raise StopIteration
+
+        cdef tuple out = (
+            self.chrom, self.interval.start, self.interval.end, self.interval.val
+        )
+        self.interval = self.interval.next
+        
+        return out
+
+    def __dealloc__(self):
+        if self.lm != NULL:
+            lmCleanup(&self.lm)
+
+
+cdef class BigBedIntervalIterator:
+    
+    cdef BBiFile fp
+    cdef str chrom
+    cdef int valid_start
+    cdef int valid_end
+    cdef bigBedInterval *interval
+    cdef lm *lm
+
+    def __init__(self, BBiFile fp, bytes chromName, int validStart, int validEnd):
+        if fp.closed:
+            raise OSError("File closed")
+        self.fp = fp
+        self.chrom = chromName.decode('ascii')
+        self.valid_start = validStart
+        self.valid_end = validEnd
+        
+        # interval list is allocated out of lm
+        self.lm = lmInit(0)
+        self.interval = bigBedIntervalQuery(
+            self.fp.bbi, chromName, validStart, validEnd, 0, self.lm
+        )
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.interval == NULL:
+            raise StopIteration
+
+        cdef tuple restTup
+        cdef str rest
+        cdef char *cRest = self.interval.rest
+        if cRest != NULL:
+            rest = (<bytes>cRest).decode('ascii')
+            restTup = tuple(rest.split('\t'))
+        else:
+            restTup = ()
+
+        out = (self.chrom, self.interval.start, self.interval.end, *restTup)
+        self.interval = self.interval.next        
+        return out
+
+    def __dealloc__(self):
+        if self.lm != NULL:
+            lmCleanup(&self.lm)
 
 
 cdef inline void array_query_full(
-        np.ndarray[np.double_t, ndim=1] out,
-        int nbins,
-        bbiFile *bbi,
-        BbiFetchIntervals fetchIntervals,
-        bytes chromName,
-        int start,
-        int end,
-        int chromSize,
-        double oob):
-
+    np.ndarray[np.double_t, ndim=1] out,
+    int nbins,
+    bbiFile *bbi,
+    BbiFetchIntervals fetchIntervals,
+    bytes chromName,
+    int start,
+    int end,
+    int chromSize,
+    double oob
+):
     # Clip the query range
     cdef int validStart = start, validEnd = end
     if start < 0:
@@ -658,24 +869,18 @@ cdef inline void array_query_full(
     lmCleanup(&lm)
 
 
-cdef double var_from_sums(double sum, double sumSquares, bits64 n):
-    cdef double var = sumSquares - sum*sum/n
-    if n > 1:
-        var /= n - 1
-    return var
-
-
 cdef inline void array_query_summarized(
-        np.ndarray[np.double_t, ndim=1] out,
-        int nbins,
-        bbiFile *bbi,
-        BbiFetchIntervals fetchIntervals,
-        bytes chromName,
-        int start,
-        int end,
-        int chromSize,
-        double oob,
-        bbiSummaryType summaryType):
+    np.ndarray[np.double_t, ndim=1] out,
+    int nbins,
+    bbiFile *bbi,
+    BbiFetchIntervals fetchIntervals,
+    bytes chromName,
+    int start,
+    int end,
+    int chromSize,
+    double oob,
+    bbiSummaryType summaryType
+):
 
     # Clip the query range
     cdef int validStart = start, validEnd = end
@@ -744,15 +949,16 @@ cdef inline void array_query_summarized(
 
 
 cdef boolean _bbiSummariesFromZoom(
-       bbiFile *bbi,
-       bbiZoomLevel *zoom,
-       bytes chromName,
-       int start,
-       int end,
-       int validStart,
-       int validEnd,
-       bbiSummaryElement *elements,
-       int nbins):
+   bbiFile *bbi,
+   bbiZoomLevel *zoom,
+   bytes chromName,
+   int start,
+   int end,
+   int validStart,
+   int validEnd,
+   bbiSummaryElement *elements,
+   int nbins
+):
     # Look up region in index and get data at given zoom level.
     # Summarize this data in the summary array.
 
@@ -763,7 +969,8 @@ cdef boolean _bbiSummariesFromZoom(
     # Find appropriate zoom-level summary data
     # summList is allocated
     cdef bbiSummary *summList = bbiSummariesInRegion(
-        zoom, bbi, chromId, validStart, validEnd)
+        zoom, bbi, chromId, validStart, validEnd
+    )
 
     # Interpolate the summary data
     cdef boolean result = False
@@ -794,15 +1001,16 @@ cdef boolean _bbiSummariesFromZoom(
 
 
 cdef boolean _bbiSummariesFromFull(
-        bbiFile *bbi,
-        BbiFetchIntervals fetchIntervals,
-        bytes chromName,
-        int start,
-        int end,
-        int validStart,
-        int validEnd,
-        bbiSummaryElement *elements,
-        int nbins):
+    bbiFile *bbi,
+    BbiFetchIntervals fetchIntervals,
+    bytes chromName,
+    int start,
+    int end,
+    int validStart,
+    int validEnd,
+    bbiSummaryElement *elements,
+    int nbins
+):
     # Summarize data, not using zoom. Updates the summary elements.
 
     # Find appropriate interval elements

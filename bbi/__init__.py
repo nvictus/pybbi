@@ -1,18 +1,19 @@
-#-*- coding: utf-8 -*-
-from __future__ import division, print_function, absolute_import
 from .cbbi import (
     is_bbi,
     is_bigwig,
     is_bigbed,
-    info,
-    zooms,
-    chromsizes,
-    fetch,
-    stackup,
-    fetch_intervals,
+    open,
 )
 
-__all__ = ['is_bbi', 'is_bigwig', 'is_bigbed', 'info', 'zooms', 'chromsizes',
-           'fetch', 'stackup', 'fetch_intervals']
+from ._bbi import (
+    info,
+    chromsizes,
+    zooms,
+    fetch_intervals,
+    fetch,
+    stackup,
+)
 
-__version__ = '0.2.3'
+del cbbi, _bbi
+
+__version__ = '0.3.0-dev'

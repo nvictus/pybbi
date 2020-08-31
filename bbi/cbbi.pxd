@@ -10,6 +10,9 @@ cdef extern from "common.h":
     ctypedef np.uint16_t bits16
     ctypedef np.uint32_t bits32
     ctypedef np.uint64_t bits64
+    cdef struct slName:
+        slName *next
+        char name[1]
 
     int sameString(char *a, char *b)
     FILE *mustOpen(char *fileName, char *mode)
@@ -310,3 +313,103 @@ cdef extern from "bigBed.h":
         bits32 end,
         int summarySize,
         bbiSummaryElement *summary);
+    char *bbiCachedChromLookup(
+        bbiFile *bbi,
+        int chromId,
+        int lastChromId,
+        char *chromBuf,
+        int chromBufSize)
+    char *bigBedAutoSqlText(bbiFile *bbi)
+    asObject *bigBedAs(bbiFile *bbi);
+    asObject *bigBedAsOrDefault(bbiFile *bbi)
+    asObject *bigBedFileAsObjOrDefault(char *fileName)
+
+
+cdef extern from "asParse.h":
+    cdef enum asTypes:
+        t_double, t_float, t_char, t_int, t_uint, t_short, \
+        t_ushort, t_byte, t_ubyte, t_off, t_string, t_lstring, t_object, \
+        t_simple, t_enum, t_set
+
+    cdef struct asTypeInfo:
+        char *name
+        bint isUnsigned
+        bint stringy
+        char *sqlName
+        char *cName
+        char *listyName
+        char *nummyName
+        char *outFormat
+        char *djangoName
+
+    cdef struct asIndex:
+        asIndex *next
+        char *type
+        int size
+
+    cdef struct asColumn:
+        asColumn *next
+        char *name
+        char *comment
+        asTypeInfo *lowType
+        char *obName
+        asObject *obType
+        int fixedSize
+        char *linkedSizeName
+        asColumn *linkedSize
+        bint isSizeLink
+        bint isList
+        bint isArray
+        bint autoIncrement
+        slName *values
+        asIndex *index
+
+    cdef struct asObject:
+        asObject *next
+        char *name
+        char *comment
+        asColumn *columnList
+        bint isTable
+        bint isSimple
+        int bla
+
+    asObject *asParseText(char *text)
+    void asObjectFree(asObject **pAs)
+
+
+cdef extern from "dystring.h":
+
+    cdef struct dyString:
+        dyString *next
+        char *string
+        int bufSize
+        int stringSize
+
+
+cdef extern from 'setjmp.h':
+    struct __jmp_buf_tag:
+        pass
+    ctypedef __jmp_buf_tag jmp_buf
+    int setjmp (jmp_buf __env)
+    int longjmp (jmp_buf __env, int val)
+
+
+cdef extern from "errCatch.h":
+
+    cdef struct errCatch:
+        errCatch *next
+        jmp_buf jmpBuf
+        dyString *message
+        boolean gotError
+        boolean gotWarning
+
+    errCatch *errCatchNew()
+    boolean errCatchStart(errCatch *errCatch)
+    boolean errCatchPushHandlers(errCatch *errCatch)
+    void errCatchEnd(errCatch *errCatch)
+    void errCatchFree(errCatch *errCatch)
+
+
+cdef extern from "basicBed.h":
+
+    char *bedAsDef(int bedFieldCount, int totalFieldCount)
