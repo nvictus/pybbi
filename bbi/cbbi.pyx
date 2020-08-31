@@ -6,6 +6,7 @@ from collections import OrderedDict
 import io
 import os.path as op
 import sys
+import warnings
 
 import numpy as np
 
@@ -204,13 +205,13 @@ def open(str inFile):
 
     Returns
     -------
-    BbiFile
+    BBiFile
 
     """
-    return BbiFile(inFile)
+    return BBiFile(inFile)
 
 
-cdef class BbiFile:
+cdef class BBiFile:
     """
     Interface to a UCSC Big Binary (BBi) file.
 
@@ -745,6 +746,108 @@ cdef class BbiFile:
                     chromName, start, end, chromSize, oob, summary_type
                 )
         return out
+
+
+def fetch_intervals(
+        str inFile,
+        str chrom,
+        int start,
+        int end):
+    """
+    Return a generator that iterates over the records of data intervals in a
+    bbi file overlapping a specified genomic query interval.
+    Parameters
+    ----------
+    inFile : str
+        Path to BigWig or BigBed file.
+    chrom : str
+        Chromosome name.
+    start : int
+        Start coordinate.
+    end : int
+        End coordinate. If end is less than zero, the end is set to the
+        chromosome size.
+    Yields
+    ------
+    tuple
+        bedGraph or BED record
+    """
+    warnings.warn(
+        "`fetch_intervals` generator behavior is deprecated and will be changed "
+        "in a future version. Migrate to `BBiFile.fetch_intervals` which returns "
+        "a pandas DataFrame instead.",
+        category=FutureWarning,
+        stacklevel=2,
+    )
+    # open the file
+    cdef bits32 sig = _check_sig(inFile)
+    cdef bytes bInFile = inFile.encode('utf-8')
+    cdef bbiFile *bbi
+    if sig == bigWigSig:
+        bbi = bigWigFileOpen(bInFile)
+    elif sig == bigBedSig:
+        bbi = bigBedFileOpen(bInFile)
+    else:
+        raise OSError("Not a bbi file: {}".format(inFile))
+
+    # find the chromosome
+    cdef bytes chromName = chrom.encode('ascii')
+    cdef int chromSize = bbiChromSize(bbi, chromName)
+    if chromSize == 0:
+        bbiFileClose(&bbi)
+        raise KeyError("Chromosome not found: {}".format(chrom))
+
+    # check the coordinates
+    if end < 0:
+        end = chromSize
+    if start > chromSize:
+        bbiFileClose(&bbi)
+        raise ValueError(
+            "Start exceeds the chromosome length, {}.".format(chromSize))
+    cdef length = end - start
+    if length < 0:
+        bbiFileClose(&bbi)
+        raise ValueError(
+            "Interval cannot have negative length:"
+            " start = {}, end = {}.".format(start, end))
+
+    # clip the query range
+    cdef int validStart = start, validEnd = end
+    if start < 0:
+        validStart = 0
+    if end > chromSize:
+        validEnd = chromSize
+
+    # query
+    # interval list is allocated out of lm
+    cdef lm *lm = lmInit(0)
+    cdef bbiInterval *bwInterval
+    cdef bigBedInterval *bbInterval
+    cdef tuple restTup
+    cdef char *cRest = NULL
+    cdef bytes bRest
+    cdef str rest
+    if sig == bigWigSig:
+        bwInterval = bigWigIntervalQuery(bbi, chromName, validStart, validEnd, lm)
+        while bwInterval != NULL:
+            yield (chrom, bwInterval.start, bwInterval.end, bwInterval.val)
+            bwInterval = bwInterval.next
+    else:
+        bbInterval = bigBedIntervalQuery(bbi, chromName, validStart, validEnd, 0, lm)
+        while bbInterval != NULL:
+            cRest = bbInterval.rest
+            if cRest != NULL:
+                bRest = cRest
+                rest = bRest.decode('ascii')
+                restTup = tuple(rest.split('\t'))
+            else:
+                restTup = ()
+            yield (chrom, bbInterval.start, bbInterval.end) + restTup
+            bbInterval = bbInterval.next
+
+    # clean up
+    lmCleanup(&lm)
+    bbiFileClose(&bbi)
 
 
 cdef inline void array_query_full(

@@ -125,10 +125,19 @@ def test_fetch_oob(path):
 
 @pytest.mark.parametrize('path', bbi_paths)
 def test_fetch_intervals(path):
-    df = bbi.fetch_intervals(path, 'chr21', 0, 1000)  # unmappable region
-    assert len(df) == 0
-    df = bbi.fetch_intervals(path, 'chr21', 0, 10000000)
-    assert len(df) > 0
+    gen = bbi.fetch_intervals(path, 'chr21', 0, 1000)  # unmappable region
+    assert len(list(gen)) == 0
+
+    gen = bbi.fetch_intervals(path, 'chr21', 0, 10000000)
+    assert len(list(gen)) > 0
+
+    with bbi.open(path) as f:
+        df = f.fetch_intervals('chr21', 0, 1000)  # unmappable region
+        assert len(df) == 0
+
+    with bbi.open(path) as f:
+        df = f.fetch_intervals('chr21', 0, 10000000)  # unmappable region
+        assert len(df) > 0
 
 
 @pytest.mark.parametrize('path', bbi_paths)

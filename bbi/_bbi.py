@@ -2,20 +2,14 @@ import numpy as np
 
 from . import cbbi
 
-__all__ = [
-    'info',
-    'chromsizes',
-    'zooms',
-    'fetch',
-    'fetch_intervals',
-    'stackup',
-]
+__all__ = ["info", "chromsizes", "zooms", "fetch", "stackup"]
 
 
 def documented_by(original):
     def wrapper(target):
         target.__doc__ = original.__doc__
         return target
+
     return wrapper
 
 
@@ -75,42 +69,15 @@ def info(inFile):
         return f.info
 
 
-@documented_by(cbbi.BbiFile.fetch_intervals)
-def fetch_intervals(
-    inFile,
-    chrom,
-    start,
-    end
-):
-    with cbbi.open(inFile) as f:
-        return f.fetch_intervals(chrom, start, end)
-
-
-@documented_by(cbbi.BbiFile.fetch)
-def fetch(
-    inFile,
-    chrom,
-    start,
-    end,
-    bins=-1,
-    missing=0.0,
-    oob=np.nan,
-    summary='mean'
-):
+@documented_by(cbbi.BBiFile.fetch)
+def fetch(inFile, chrom, start, end, bins=-1, missing=0.0, oob=np.nan, summary="mean"):
     with cbbi.open(inFile) as f:
         return f.fetch(chrom, start, end, bins, missing, oob, summary)
 
 
-@documented_by(cbbi.BbiFile.stackup)
+@documented_by(cbbi.BBiFile.stackup)
 def stackup(
-    inFile,
-    chroms,
-    starts,
-    ends,
-    bins=-1,
-    missing=0.0,
-    oob=np.nan,
-    summary='mean'
+    inFile, chroms, starts, ends, bins=-1, missing=0.0, oob=np.nan, summary="mean"
 ):
     with cbbi.open(inFile) as f:
         return f.stackup(chroms, starts, ends, bins, missing, oob, summary)
