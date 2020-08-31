@@ -112,7 +112,7 @@ If wheels for your platform or Python version aren't available or you want to de
 Requires
 - Linux/MacOS
 - C compiler, zlib, pthreads, libpng, openssl, make
-- Python 2.7/3.4+
+- Python 3.4+
 - `numpy` and `cython`
 
 On fresh Ubuntu instance, you'll need `build-essential`, `make`, `zlib1g-dev`, `libssl-dev`, `libpng16-dev`. It seems to work on the Windows Subsystem for Linux too.
