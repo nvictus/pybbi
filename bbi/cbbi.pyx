@@ -107,29 +107,6 @@ cdef double var_from_sums(double sum, double sumSquares, bits64 n):
     return var
 
 
-# cdef inline int errCatchHandle(errCatch *e) except -1:
-#     cdef bytes msg
-#     if e.gotError:
-#         msg = e.message.string if e.message != NULL else b''
-#         raise RuntimeError('UCSC lib error\n{}'.format(msg.decode('utf-8')))
-#     errCatchFree(e)
-#     return 0
-
-
-# cdef bbiFile* _open(str inFile, bits32 sig) except *:
-#     # open the file
-#     cdef bytes bInFile = inFile.encode('utf-8')
-#     cdef errCatch *e = errCatchNew()
-#     if errCatchStart(e):
-#         if sig == bigWigSig:
-#             bbi = bigWigFileOpen(bInFile)
-#         else:
-#             bbi = bigBedFileOpen(bInFile)
-#     errCatchEnd(e)
-#     errCatchHandle(e)
-#     return bbi
-
-
 def is_bbi(inFile):
     """
     Returns True if `inFile` is a path or URL to a big binary file.
@@ -251,14 +228,13 @@ cdef class BBIFile:
             return None
 
         # Try to read autosql definition string
+        # Otherwise use default autosql BED definition based on number of fields
         cdef char *cText = bigBedAutoSqlText(self.bbi)
         if cText == NULL:
-            # Use default autosql BED definition based on number of fields
             cText = bedAsDef(self.bbi.definedFieldCount, self.bbi.fieldCount)
-        cdef str raw_text = (<bytes>cText).decode('ascii')
+        cdef str text = (<bytes>cText).decode('ascii')
         freeMem(cText)
-
-        return raw_text
+        return text
 
     @property
     def schema(self):
@@ -285,9 +261,9 @@ cdef class BBIFile:
             }
 
         # Try to read autosql definition string
+        # Otherwise use default autosql BED definition based on number of fields
         cdef char *cText = bigBedAutoSqlText(self.bbi)
         if cText == NULL:
-            # Use default autosql BED definition based on number of fields
             cText = bedAsDef(self.bbi.definedFieldCount, self.bbi.fieldCount)
 
         # Parse definition string into an object and free the string
@@ -715,7 +691,6 @@ cdef class BBIFile:
 
 cdef class BigWigIntervalIterator:
     
-    cdef BBIFile fp
     cdef str chrom
     cdef int valid_start
     cdef int valid_end
@@ -725,7 +700,6 @@ cdef class BigWigIntervalIterator:
     def __init__(self, BBIFile fp, bytes chromName, int validStart, int validEnd):
         if fp.closed:
             raise OSError("File closed")
-        self.fp = fp
         self.chrom = chromName.decode('ascii')
         self.valid_start = validStart
         self.valid_end = validEnd
@@ -733,7 +707,7 @@ cdef class BigWigIntervalIterator:
         # interval list is allocated out of lm
         self.lm = lmInit(0)
         self.interval = bigWigIntervalQuery(
-            self.fp.bbi, chromName, validStart, validEnd, self.lm
+            fp.bbi, chromName, validStart, validEnd, self.lm
         )
 
     def __iter__(self):
@@ -752,12 +726,12 @@ cdef class BigWigIntervalIterator:
 
     def __dealloc__(self):
         if self.lm != NULL:
+            self.interval = NULL
             lmCleanup(&self.lm)
 
 
 cdef class BigBedIntervalIterator:
     
-    cdef BBIFile fp
     cdef str chrom
     cdef int valid_start
     cdef int valid_end
@@ -767,7 +741,6 @@ cdef class BigBedIntervalIterator:
     def __init__(self, BBIFile fp, bytes chromName, int validStart, int validEnd):
         if fp.closed:
             raise OSError("File closed")
-        self.fp = fp
         self.chrom = chromName.decode('ascii')
         self.valid_start = validStart
         self.valid_end = validEnd
@@ -775,7 +748,7 @@ cdef class BigBedIntervalIterator:
         # interval list is allocated out of lm
         self.lm = lmInit(0)
         self.interval = bigBedIntervalQuery(
-            self.fp.bbi, chromName, validStart, validEnd, 0, self.lm
+            fp.bbi, chromName, validStart, validEnd, 0, self.lm
         )
 
     def __iter__(self):
@@ -800,6 +773,7 @@ cdef class BigBedIntervalIterator:
 
     def __dealloc__(self):
         if self.lm != NULL:
+            self.interval = NULL
             lmCleanup(&self.lm)
 
 
