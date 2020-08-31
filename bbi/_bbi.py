@@ -81,3 +81,15 @@ def stackup(
 ):
     with cbbi.open(inFile) as f:
         return f.stackup(chroms, starts, ends, bins, missing, oob, summary)
+
+
+@documented_by(cbbi.BBiFile.fetch_intervals)
+def fetch_intervals(
+    inFile,
+    chrom,
+    start,
+    end,
+    iterator=True
+):
+    with cbbi.open(inFile) as f:
+        return f.fetch_intervals(chrom, start, end, iterator)

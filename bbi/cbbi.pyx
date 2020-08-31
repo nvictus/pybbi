@@ -252,6 +252,10 @@ cdef class BBiFile:
         if self.bbi != NULL:
             bbiFileClose(&self.bbi)
 
+    @property
+    def closed(self):
+        return self.bbi == NULL
+
     def read_autosql(self):
         if self.bbi == NULL:
             raise OSError("File closed")
@@ -422,107 +426,6 @@ cdef class BBiFile:
             }
         }
 
-    def fetch_intervals(self, chrom, start, end):
-        """
-        Return a data frame of intervals overlapping a specified genomic query
-        interval.
-
-        Parameters
-        ----------
-        chrom : str
-            Chromosome name.
-        start : int
-            Start coordinate.
-        end : int
-            End coordinate. If end is less than zero, the end is set to the
-            chromosome size.
-
-        Returns
-        -------
-        pd.DataFrame
-
-        """
-        try:
-            import pandas as pd
-        except ImportError:
-            raise ImportError("fetch_intervals requires pandas")
-
-        if self.bbi == NULL:
-            raise OSError("File closed")
-
-        # find the chromosome
-        cdef bytes chromName = chrom.encode('ascii')
-        cdef int chromSize = bbiChromSize(self.bbi, chromName)
-        if chromSize == 0:
-            raise KeyError("Chromosome not found: {}".format(chrom))
-
-        # check the coordinates
-        if end < 0:
-            end = chromSize
-        if start > chromSize:
-            raise ValueError(
-                "Start exceeds the chromosome length, {}.".format(chromSize))
-        cdef length = end - start
-        if length < 0:
-            raise ValueError(
-                "Interval cannot have negative length:"
-                " start = {}, end = {}.".format(start, end))
-
-        # clip the query range
-        cdef int validStart = start, validEnd = end
-        if start < 0:
-            validStart = 0
-        if end > chromSize:
-            validEnd = chromSize
-
-        # query
-        cdef list ivals = []
-        # interval list is allocated out of lm
-        cdef lm *lm = lmInit(0)
-        cdef bbiInterval *bwInterval
-        cdef bigBedInterval *bbInterval
-        cdef tuple restTup
-        cdef char *cRest = NULL
-        cdef bytes bRest
-        cdef str rest
-        if self.is_bigwig:
-            bwInterval = bigWigIntervalQuery(
-                self.bbi, chromName, validStart, validEnd, lm
-            )
-            while bwInterval != NULL:
-                ivals.append(
-                    (chrom, bwInterval.start, bwInterval.end, bwInterval.val)
-                )
-                bwInterval = bwInterval.next
-        else:
-            bbInterval = bigBedIntervalQuery(
-                self.bbi, chromName, validStart, validEnd, 0, lm
-            )
-            while bbInterval != NULL:
-                cRest = bbInterval.rest
-                if cRest != NULL:
-                    bRest = cRest
-                    rest = bRest.decode('ascii')
-                    restTup = tuple(rest.split('\t'))
-                else:
-                    restTup = ()
-                ivals.append(
-                    (chrom, bbInterval.start, bbInterval.end, *restTup)
-                )
-                bbInterval = bbInterval.next
-
-        # clean up
-        lmCleanup(&lm)
-
-        df = pd.DataFrame(ivals, columns=self.schema['columns'])
-        for col, dtype in self.schema['dtypes'].items():
-            try:
-                df[col] = df[col].astype(dtype)
-            except:
-                pass
-
-        return df
-
     def fetch(
         self,
         str chrom,
@@ -640,10 +543,10 @@ cdef class BBiFile:
         chroms,
         starts,
         ends,
-        bins=-1,
-        missing=0.0,
-        oob=np.nan,
-        summary='mean'
+        int bins=-1,
+        double missing=0.0,
+        double oob=np.nan,
+        str summary='mean'
     ):
         """
         Vertically stack signal tracks from equal-length bbi query intervals.
@@ -747,107 +650,170 @@ cdef class BBiFile:
                 )
         return out
 
+    def fetch_intervals(self, str chrom, int start, int end, bint iterator=False):
+        """
+        Return an iterator or data frame of feature intervals overlapping a 
+        specified genomic query interval.
 
-def fetch_intervals(
-        str inFile,
-        str chrom,
-        int start,
-        int end):
-    """
-    Return a generator that iterates over the records of data intervals in a
-    bbi file overlapping a specified genomic query interval.
-    Parameters
-    ----------
-    inFile : str
-        Path to BigWig or BigBed file.
-    chrom : str
-        Chromosome name.
-    start : int
-        Start coordinate.
-    end : int
-        End coordinate. If end is less than zero, the end is set to the
-        chromosome size.
-    Yields
-    ------
-    tuple
-        bedGraph or BED record
-    """
-    warnings.warn(
-        "`fetch_intervals` generator behavior is deprecated and will be changed "
-        "in a future version. Migrate to `BBiFile.fetch_intervals` which returns "
-        "a pandas DataFrame instead.",
-        category=FutureWarning,
-        stacklevel=2,
-    )
-    # open the file
-    cdef bits32 sig = _check_sig(inFile)
-    cdef bytes bInFile = inFile.encode('utf-8')
-    cdef bbiFile *bbi
-    if sig == bigWigSig:
-        bbi = bigWigFileOpen(bInFile)
-    elif sig == bigBedSig:
-        bbi = bigBedFileOpen(bInFile)
-    else:
-        raise OSError("Not a bbi file: {}".format(inFile))
+        Parameters
+        ----------
+        chrom : str
+            Chromosome name.
+        start : int
+            Start coordinate.
+        end : int
+            End coordinate. If end is less than zero, the end is set to the
+            chromosome size.
+        iterator : bool, optional
+            If True, return an iterator that provides records as tuples. For 
+            bigBeds, extra BED fields will be returned as unparsed strings. If 
+            False, return a DataFrame with all columns parsed according to the 
+            file's autosql schema.
 
-    # find the chromosome
-    cdef bytes chromName = chrom.encode('ascii')
-    cdef int chromSize = bbiChromSize(bbi, chromName)
-    if chromSize == 0:
-        bbiFileClose(&bbi)
-        raise KeyError("Chromosome not found: {}".format(chrom))
+        Returns
+        -------
+        pandas.DataFrame or BigWigIntervalIterator or BigBedIntervalIterator
 
-    # check the coordinates
-    if end < 0:
-        end = chromSize
-    if start > chromSize:
-        bbiFileClose(&bbi)
-        raise ValueError(
-            "Start exceeds the chromosome length, {}.".format(chromSize))
-    cdef length = end - start
-    if length < 0:
-        bbiFileClose(&bbi)
-        raise ValueError(
-            "Interval cannot have negative length:"
-            " start = {}, end = {}.".format(start, end))
+        """
+        if self.bbi == NULL:
+            raise OSError("File closed")
 
-    # clip the query range
-    cdef int validStart = start, validEnd = end
-    if start < 0:
-        validStart = 0
-    if end > chromSize:
-        validEnd = chromSize
+        # find the chromosome
+        cdef bytes chromName = chrom.encode('ascii')
+        cdef int chromSize = bbiChromSize(self.bbi, chromName)
+        if chromSize == 0:
+            raise KeyError("Chromosome not found: {}".format(chrom))
 
-    # query
-    # interval list is allocated out of lm
-    cdef lm *lm = lmInit(0)
-    cdef bbiInterval *bwInterval
-    cdef bigBedInterval *bbInterval
-    cdef tuple restTup
-    cdef char *cRest = NULL
-    cdef bytes bRest
-    cdef str rest
-    if sig == bigWigSig:
-        bwInterval = bigWigIntervalQuery(bbi, chromName, validStart, validEnd, lm)
-        while bwInterval != NULL:
-            yield (chrom, bwInterval.start, bwInterval.end, bwInterval.val)
-            bwInterval = bwInterval.next
-    else:
-        bbInterval = bigBedIntervalQuery(bbi, chromName, validStart, validEnd, 0, lm)
-        while bbInterval != NULL:
-            cRest = bbInterval.rest
-            if cRest != NULL:
-                bRest = cRest
-                rest = bRest.decode('ascii')
-                restTup = tuple(rest.split('\t'))
-            else:
-                restTup = ()
-            yield (chrom, bbInterval.start, bbInterval.end) + restTup
-            bbInterval = bbInterval.next
+        # check the coordinates
+        if end < 0:
+            end = chromSize
+        if start > chromSize:
+            raise ValueError(
+                "Start exceeds the chromosome length, {}.".format(chromSize))
+        cdef length = end - start
+        if length < 0:
+            raise ValueError(
+                "Interval cannot have negative length:"
+                " start = {}, end = {}.".format(start, end))
 
-    # clean up
-    lmCleanup(&lm)
-    bbiFileClose(&bbi)
+        # clip the query range
+        cdef int validStart = start, validEnd = end
+        if start < 0:
+            validStart = 0
+        if end > chromSize:
+            validEnd = chromSize
+
+        if self.is_bigwig:
+            it = BigWigIntervalIterator(self, chromName, validStart, validEnd)
+        else:
+            it = BigBedIntervalIterator(self, chromName, validStart, validEnd)
+
+        if iterator:
+            return it
+        else:
+            try:
+                import pandas as pd
+            except ImportError:
+                raise ImportError("fetch_intervals requires pandas")
+
+            df = pd.DataFrame(list(it), columns=self.schema['columns'])
+            for col, dtype in self.schema['dtypes'].items():
+                try:
+                    df[col] = df[col].astype(dtype)
+                except:
+                    pass
+
+        return df
+
+
+cdef class BigWigIntervalIterator:
+    
+    cdef BBiFile fp
+    cdef str chrom
+    cdef int valid_start
+    cdef int valid_end
+    cdef bbiInterval *interval
+    cdef lm *lm
+
+    def __init__(self, BBiFile fp, bytes chromName, int validStart, int validEnd):
+        if fp.closed:
+            raise OSError("File closed")
+        self.fp = fp
+        self.chrom = chromName.decode('ascii')
+        self.valid_start = validStart
+        self.valid_end = validEnd
+
+        # interval list is allocated out of lm
+        self.lm = lmInit(0)
+        self.interval = bigWigIntervalQuery(
+            self.fp.bbi, chromName, validStart, validEnd, self.lm
+        )
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.interval == NULL:
+            raise StopIteration
+
+        cdef tuple out = (
+            self.chrom, self.interval.start, self.interval.end, self.interval.val
+        )
+        self.interval = self.interval.next
+        
+        return out
+
+    def __dealloc__(self):
+        if self.lm != NULL:
+            lmCleanup(&self.lm)
+
+
+cdef class BigBedIntervalIterator:
+    
+    cdef BBiFile fp
+    cdef str chrom
+    cdef int valid_start
+    cdef int valid_end
+    cdef bigBedInterval *interval
+    cdef lm *lm
+
+    def __init__(self, BBiFile fp, bytes chromName, int validStart, int validEnd):
+        if fp.closed:
+            raise OSError("File closed")
+        self.fp = fp
+        self.chrom = chromName.decode('ascii')
+        self.valid_start = validStart
+        self.valid_end = validEnd
+        
+        # interval list is allocated out of lm
+        self.lm = lmInit(0)
+        self.interval = bigBedIntervalQuery(
+            self.fp.bbi, chromName, validStart, validEnd, 0, self.lm
+        )
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.interval == NULL:
+            raise StopIteration
+
+        cdef tuple restTup
+        cdef str rest
+        cdef char *cRest = self.interval.rest
+        if cRest != NULL:
+            rest = (<bytes>cRest).decode('ascii')
+            restTup = tuple(rest.split('\t'))
+        else:
+            restTup = ()
+
+        out = (self.chrom, self.interval.start, self.interval.end, *restTup)
+        self.interval = self.interval.next        
+        return out
+
+    def __dealloc__(self):
+        if self.lm != NULL:
+            lmCleanup(&self.lm)
 
 
 cdef inline void array_query_full(

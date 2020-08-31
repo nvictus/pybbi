@@ -2,7 +2,6 @@ from .cbbi import (
     is_bbi,
     is_bigwig,
     is_bigbed,
-    fetch_intervals,
     open,
 )
 
@@ -10,6 +9,7 @@ from ._bbi import (
     info,
     chromsizes,
     zooms,
+    fetch_intervals,
     fetch,
     stackup,
 )
