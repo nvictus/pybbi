@@ -2,7 +2,7 @@ import numpy as np
 
 from . import cbbi
 
-__all__ = ["info", "chromsizes", "zooms", "fetch", "stackup"]
+__all__ = ["info", "chromsizes", "zooms", "fetch_intervals", "fetch", "stackup"]
 
 
 def documented_by(original):
@@ -69,13 +69,13 @@ def info(inFile):
         return f.info
 
 
-@documented_by(cbbi.BBiFile.fetch)
+@documented_by(cbbi.BBIFile.fetch)
 def fetch(inFile, chrom, start, end, bins=-1, missing=0.0, oob=np.nan, summary="mean"):
     with cbbi.open(inFile) as f:
         return f.fetch(chrom, start, end, bins, missing, oob, summary)
 
 
-@documented_by(cbbi.BBiFile.stackup)
+@documented_by(cbbi.BBIFile.stackup)
 def stackup(
     inFile, chroms, starts, ends, bins=-1, missing=0.0, oob=np.nan, summary="mean"
 ):
@@ -83,7 +83,7 @@ def stackup(
         return f.stackup(chroms, starts, ends, bins, missing, oob, summary)
 
 
-@documented_by(cbbi.BBiFile.fetch_intervals)
+@documented_by(cbbi.BBIFile.fetch_intervals)
 def fetch_intervals(
     inFile,
     chrom,
