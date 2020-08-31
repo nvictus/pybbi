@@ -725,8 +725,9 @@ cdef class BigWigIntervalIterator:
         return out
 
     def __dealloc__(self):
-        if self.lm != NULL:
+        if self.interval != NULL:
             self.interval = NULL
+        if self.lm != NULL:
             lmCleanup(&self.lm)
 
 
@@ -772,8 +773,9 @@ cdef class BigBedIntervalIterator:
         return out
 
     def __dealloc__(self):
-        if self.lm != NULL:
+        if self.interval != NULL:
             self.interval = NULL
+        if self.lm != NULL:
             lmCleanup(&self.lm)
 
 
