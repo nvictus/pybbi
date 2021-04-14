@@ -17,7 +17,7 @@ PY_VERSIONS=("3.6" "3.7" "3.8" "3.9")
 PKG_URLS=(
     "https://www.python.org/ftp/python/3.6.8/python-3.6.8-macosx10.6.pkg"
     "https://www.python.org/ftp/python/3.7.5/python-3.7.5-macosx10.6.pkg"
-    "https://www.python.org/ftp/python/3.8.9/python-3.8.0-macosx10.9.pkg"
+    "https://www.python.org/ftp/python/3.8.9/python-3.8.9-macosx10.9.pkg"
     "https://www.python.org/ftp/python/3.9.4/python-3.9.4-macosx10.9.pkg"
 )
 len=${#PKG_URLS[@]}
