@@ -68,7 +68,7 @@ For a list of equal-length segments (i.e. to produce a stacked heatmap):
 BBIFile.stackup(chroms, starts, ends, [bins [, missing [, oob, [, summary]]]]) -> 2D numpy array
 ```
 
-* **Summary** querying is supported by specifying the number of `bins` for coarsening. The `summary` statistic can be one of: 'mean', 'min', 'max', 'cov', or 'std'. (default = 'mean').
+* **Summary** querying is supported by specifying the number of `bins` for coarsening. The `summary` statistic can be one of: 'mean', 'min', 'max', 'cov', 'std', 'or 'sum'. (default = 'mean').
 
 * **Missing** data can be filled with a custom fill value, `missing` (default = 0). 
 
