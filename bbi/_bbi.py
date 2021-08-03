@@ -70,17 +70,19 @@ def info(inFile):
 
 
 @documented_by(cbbi.BBIFile.fetch)
-def fetch(inFile, chrom, start, end, bins=-1, missing=0.0, oob=np.nan, summary="mean"):
+def fetch(
+    inFile, chrom, start, end, bins=-1, missing=0.0, oob=np.nan, summary="mean", exact=False
+):
     with cbbi.open(inFile) as f:
-        return f.fetch(chrom, start, end, bins, missing, oob, summary)
+        return f.fetch(chrom, start, end, bins, missing, oob, summary, exact)
 
 
 @documented_by(cbbi.BBIFile.stackup)
 def stackup(
-    inFile, chroms, starts, ends, bins=-1, missing=0.0, oob=np.nan, summary="mean"
+    inFile, chroms, starts, ends, bins=-1, missing=0.0, oob=np.nan, summary="mean", exact=False
 ):
     with cbbi.open(inFile) as f:
-        return f.stackup(chroms, starts, ends, bins, missing, oob, summary)
+        return f.stackup(chroms, starts, ends, bins, missing, oob, summary, exact)
 
 
 @documented_by(cbbi.BBIFile.fetch_intervals)

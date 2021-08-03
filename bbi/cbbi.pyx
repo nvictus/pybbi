@@ -397,7 +397,8 @@ cdef class BBIFile:
         int bins=-1,
         double missing=0.0,
         double oob=np.nan,
-        str summary='mean'
+        str summary='mean',
+        bint exact=False,
     ):
         """
         Read the signal data in a bbi file overlapping a genomic query interval
@@ -493,7 +494,7 @@ cdef class BBIFile:
                         set(BBI_SUMMARY_TYPES.keys())))
             array_query_summarized(
                 out, bins, self.bbi, fetcher,
-                chromName, start, end, chromSize, oob, summary_type)
+                chromName, start, end, chromSize, oob, summary_type, exact)
         else:
             array_query_full(
                 out, bins, self.bbi, fetcher,
@@ -509,7 +510,8 @@ cdef class BBIFile:
         int bins=-1,
         double missing=0.0,
         double oob=np.nan,
-        str summary='mean'
+        str summary='mean',
+        bint exact=False,
     ):
         """
         Vertically stack signal tracks from equal-length bbi query intervals.
@@ -609,7 +611,7 @@ cdef class BBIFile:
                         )
                 array_query_summarized(
                     out[i, :], bins, self.bbi, fetcher,
-                    chromName, start, end, chromSize, oob, summary_type
+                    chromName, start, end, chromSize, oob, summary_type, exact
                 )
         return out
 
@@ -842,7 +844,8 @@ cdef inline void array_query_summarized(
     int end,
     int chromSize,
     double oob,
-    bbiSummaryType summaryType
+    bbiSummaryType summaryType,
+    bint exact,
 ):
 
     # Clip the query range
@@ -865,7 +868,7 @@ cdef inline void array_query_summarized(
     cdef boolean result = False
     cdef bbiSummaryElement *elements
     AllocArray(elements, nbins)
-    if zoomObj != NULL:
+    if not exact and zoomObj != NULL:
         result = _bbiSummariesFromZoom(
             bbi, zoomObj,
             chromName, start, end, validStart, validEnd,
@@ -920,7 +923,7 @@ cdef boolean _bbiSummariesFromZoom(
    int validStart,
    int validEnd,
    bbiSummaryElement *elements,
-   int nbins
+   int nbins,
 ):
     # Look up region in index and get data at given zoom level.
     # Summarize this data in the summary array.
