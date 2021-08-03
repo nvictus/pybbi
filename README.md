@@ -1,6 +1,7 @@
 # pybbi #
 
-[![Build Status](https://travis-ci.org/nvictus/pybbi.svg?branch=master)](https://travis-ci.org/nvictus/pybbi)
+![Build Status](https://github.com/nvictus/pybbi/actions/workflows/python-package.yml/badge.svg)
+
 
 Python interface to Jim Kent's Big Binary Indexed file (BBI) \[[1](#ref1)\] library from the [UCSC Genome Browser source tree](https://github.com/ucscGenomeBrowser/kent) using Cython.
 

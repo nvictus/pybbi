@@ -37,6 +37,7 @@ jobs:
     - name: Build and install package
       run: |
           DISTUTILS_DEBUG=1 python -m pip install -v -e .
+          ldd -r bbi/cbbi*.so
     - name: Test with pytest
       run: |
         pytest -v
