@@ -110,7 +110,7 @@ def get_ext_modules():
                 'kent',
             ] + d.pop('libraries', []),
             library_dirs=[
-                op.join(thisdir, 'src/x86_64'),
+                op.join(thisdir, f'src/{os.uname().machine}'),
             ] + d.pop('library_dirs', []),
             include_dirs=[
                 numpy.get_include(),
