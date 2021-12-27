@@ -150,7 +150,6 @@ setup(
         'pkgconfig'
     ],
     install_requires=[
-        'six',
         'numpy'
     ],
     tests_require=[
