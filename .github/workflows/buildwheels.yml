@@ -23,7 +23,7 @@ jobs:
 
   buildwheel-macos:
     name: Build wheels for MacOS
-    runs-on: macos-11
+    runs-on: macOS-latest
     steps:
       - uses: actions/checkout@v1
       - run: mkdir wheels
@@ -31,4 +31,16 @@ jobs:
       - uses: actions/upload-artifact@v1
         with:
           name: macos-wheels
+          path: wheels
+
+  buildwheel-macos11:
+    name: Build wheels supported only on MacOS 11 Big Sur
+    runs-on: macos-11
+    steps:
+      - uses: actions/checkout@v1
+      - run: mkdir wheels
+      - run: bash ci/buildwheel_macos11.sh; mv /tmp/wheelhouse/*.whl wheels;
+      - uses: actions/upload-artifact@v1
+        with:
+          name: macos11-wheels
           path: wheels
