@@ -15,7 +15,7 @@ git clone https://github.com/nvictus/patchelf.git /patchelf
 cd /patchelf && ./bootstrap.sh && ./configure && make && make install
 
 # let's go
-PY_VERSIONS='cp36-cp36m cp37-cp37m cp38-cp38 cp39-cp39 cp310-cp310'
+PY_VERSIONS='cp37-cp37m cp38-cp38 cp39-cp39 cp310-cp310'
 
 cd /project
 

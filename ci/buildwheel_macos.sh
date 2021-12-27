@@ -13,9 +13,8 @@ curl -L -o /tmp/get-pip.py https://bootstrap.pypa.io/get-pip.py
 
 export C_INCLUDE_PATH="/usr/local/include/libpng:/usr/local/opt/openssl/include:$C_INCLUDE_PATH"
 
-PY_VERSIONS=("3.6" "3.7" "3.8" "3.9" "3.10")
+PY_VERSIONS=("3.7" "3.8" "3.9" "3.10")
 PKG_URLS=(
-    "https://www.python.org/ftp/python/3.6.8/python-3.6.8-macosx10.6.pkg"
     "https://www.python.org/ftp/python/3.7.5/python-3.7.5-macosx10.6.pkg"
     "https://www.python.org/ftp/python/3.8.10/python-3.8.10-macosx10.9.pkg"
     "https://www.python.org/ftp/python/3.9.9/python-3.9.9-macosx10.9.pkg"
