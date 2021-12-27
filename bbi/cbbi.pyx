@@ -1,7 +1,7 @@
 #!python
 #cython: embedsignature=True
-from six.moves.urllib.request import urlopen
-from six.moves.urllib.parse import urlparse
+from urllib.request import urlopen
+from urllib.parse import urlparse
 from collections import OrderedDict
 import io
 import os.path as op
