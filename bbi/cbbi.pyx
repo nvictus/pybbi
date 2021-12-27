@@ -177,7 +177,7 @@ def open(str inFile):
 
 cdef class BBIFile:
     """
-    Interface to a UCSC Big Binary (BBi) file.
+    Interface to a UCSC Big Binary Indexed (BBI) file.
 
     The resource may be a bigWig or a bigBed file.
     BigBed AutoSql schemas are supported.

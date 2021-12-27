@@ -1,6 +1,7 @@
 # pybbi #
 
-[![Build Status](https://travis-ci.org/nvictus/pybbi.svg?branch=master)](https://travis-ci.org/nvictus/pybbi)
+![Build Status](https://github.com/nvictus/pybbi/actions/workflows/python-package.yml/badge.svg)
+
 
 Python interface to Jim Kent's Big Binary Indexed file (BBI) \[[1](#ref1)\] library from the [UCSC Genome Browser source tree](https://github.com/ucscGenomeBrowser/kent) using Cython.
 
@@ -9,7 +10,7 @@ This provides read-level access to local and remote bigWig and bigBed files but 
 
 ## Installation ##
 
-Wheels for `pybbi` are available on PyPI for Pythons 3.5, 3.6, 3.7, 3.8 on Linux and Mac OSX.
+Wheels for `pybbi` are available on PyPI for Pythons 3.6, 3.7, 3.8, 3.9 on Linux and Mac OSX x86-64.
 
 ```
 $ pip install pybbi
@@ -68,7 +69,7 @@ For a list of equal-length segments (i.e. to produce a stacked heatmap):
 BBIFile.stackup(chroms, starts, ends, [bins [, missing [, oob, [, summary]]]]) -> 2D numpy array
 ```
 
-* **Summary** querying is supported by specifying the number of `bins` for coarsening. The `summary` statistic can be one of: 'mean', 'min', 'max', 'cov', or 'std'. (default = 'mean').
+* **Summary** querying is supported by specifying the number of `bins` for coarsening. The `summary` statistic can be one of: 'mean', 'min', 'max', 'cov', 'std', 'or 'sum'. (default = 'mean').
 
 * **Missing** data can be filled with a custom fill value, `missing` (default = 0). 
 
