@@ -16,4 +16,4 @@ from ._bbi import (
 
 del cbbi, _bbi
 
-__version__ = '0.3.1'
+__version__ = '0.3.2'
