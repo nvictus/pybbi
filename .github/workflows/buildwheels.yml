@@ -5,42 +5,19 @@ on:
     branches: [build-wheels]
 
 jobs:
-  buildwheel-manylinux:
-    name: Build wheels for Linux
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v1
-      - run: mkdir wheels
-      - run: |
-          docker create --name cibw -i quay.io/pypa/manylinux2010_x86_64;
-          docker cp $(pwd) cibw:/project;
-          docker start -i -a cibw < ci/buildwheel_manylinux.sh;
-          docker cp cibw:/tmp/wheelhouse/. wheels;
-      - uses: actions/upload-artifact@v1
-        with:
-          name: manylinux-wheels
-          path: wheels
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-20.04, macos-10.15]
 
-  buildwheel-macos:
-    name: Build wheels for MacOS
-    runs-on: macOS-latest
     steps:
-      - uses: actions/checkout@v1
-      - run: mkdir wheels
-      - run: bash ci/buildwheel_macos.sh; mv /tmp/wheelhouse/*.whl wheels;
-      - uses: actions/upload-artifact@v1
-        with:
-          name: macos-wheels
-          path: wheels
+      - uses: actions/checkout@v2
 
-  buildwheel-macos11:
-    name: Build wheels supported only on MacOS 11 Big Sur
-    runs-on: macos-11
-    steps:
-      - uses: actions/checkout@v1
-      - run: mkdir wheels
-      - run: bash ci/buildwheel_macos11.sh; mv /tmp/wheelhouse/*.whl wheels;
-      - uses: actions/upload-artifact@v1
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.3.1
+
+      - uses: actions/upload-artifact@v2
         with:
-          name: macos11-wheels
-          path: wheels
+          path: ./wheelhouse/*.whl

@@ -1,0 +1,25 @@
+[build-system]
+requires = [
+    "setuptools",
+    "wheel",
+    "oldest-supported-numpy",
+    "pkgconfig",
+    "Cython >=0.29; python_version<'3.8'",
+    "Cython >=0.29.14; python_version=='3.8'",
+    "Cython >=0.29.15; python_version>='3.9'",
+]
+build-backend = "setuptools.build_meta"
+
+[tool.cibuildwheel]
+build = ["cp37-*", "cp38-*", "cp39-*", "cp310-*"]
+skip = "*-musllinux*"
+
+[tool.cibuildwheel.linux]
+archs = ["x86_64", "aarch64"]
+before-all = "yum install -y gcc make zlib-devel openssl-devel libpng-devel"
+
+[tool.cibuildwheel.macos]
+archs = ["x86_64", "universal2", "arm64"]
+before-all = "brew install pkg-config openssl libpng"
+
+# [tool.cibuildwheel.windows]
