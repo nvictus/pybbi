@@ -19,7 +19,7 @@ archs = ["x86_64", "aarch64"]
 before-all = "yum install -y gcc make zlib-devel openssl-devel libpng-devel"
 
 [tool.cibuildwheel.macos]
-archs = ["x86_64", "universal2", "arm64"]
+archs = ["x86_64", "arm64"]
 before-all = "brew install pkg-config openssl libpng"
 
 # [tool.cibuildwheel.windows]
