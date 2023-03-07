@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext as _build_ext
 from subprocess import check_call
@@ -79,11 +78,6 @@ def get_ext_modules():
 
     # https://solitum.net/openssl-os-x-el-capitan-and-brew/
     if sys.platform == "darwin":
-        s = '/usr/local/opt/openssl/lib/pkgconfig'
-        old = os.environ.get('PKG_CONFIG_PATH')
-        if old:
-            s = old + ':' + s
-        os.environ['PKG_CONFIG_PATH'] = s
         os.environ['MACOSX_DEPLOYMENT_TARGET'] = \
             sysconfig.get_config_var('MACOSX_DEPLOYMENT_TARGET')
         os.environ['BLDSHARED'] = \

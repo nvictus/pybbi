@@ -11,7 +11,7 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [tool.cibuildwheel]
-build = ["cp37-*", "cp38-*", "cp39-*", "cp310-*"]
+build = ["cp37-*", "cp38-*", "cp39-*", "cp310-*", "cp311-*"]
 skip = "*-musllinux*"
 
 [tool.cibuildwheel.linux]
@@ -21,5 +21,10 @@ before-all = "yum install -y gcc make zlib-devel openssl-devel libpng-devel"
 [tool.cibuildwheel.macos]
 archs = ["x86_64"]
 before-all = "brew install pkg-config openssl libpng"
-
+before-build = """
+export LDFLAGS="-L/usr/local/opt/openssl/lib"
+export CPPFLAGS="-I/usr/local/opt/openssl/include"
+export PKG_CONFIG_PATH="/usr/local/opt/openssl/lib/pkgconfig:/opt/homebrew/opt/openssl/lib/pkgconfig"
+export C_INCLUDE_PATH="/usr/local/include/libpng:/usr/local/opt/openssl/include:$C_INCLUDE_PATH"
+"""
 # [tool.cibuildwheel.windows]
