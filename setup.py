@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 from setuptools import setup, Extension
-from setuptools.command.build_ext import build_ext as _build_ext
+from setuptools.command.build_ext import build_ext
 from subprocess import check_call
 from distutils import log
 import os.path as op
@@ -53,21 +53,21 @@ def get_version(pkg):
     return version
 
 
-class build_ext(_build_ext):
-    def run(self):
-        os.environ['SETUP_PY'] = '1'
+# class build_ext(_build_ext):
+#     def run(self):
+#         os.environ['SETUP_PY'] = '1'
 
-        # First, compile our C library: libkent.a
-        # import sysconfig
-        # log.info(sysconfig.get_config_vars())
-        # log.info("CPATH: " + os.environ.get("CPATH", ""))
-        # log.info("LIBRARY_PATH: " + os.environ.get("LIBRARY_PATH", ""))
-        log.info("Compiling libkent archive...")
-        check_call(['make', 'build-ucsc'])
+#         # First, compile our C library: libkent.a
+#         # import sysconfig
+#         # log.info(sysconfig.get_config_vars())
+#         # log.info("CPATH: " + os.environ.get("CPATH", ""))
+#         # log.info("LIBRARY_PATH: " + os.environ.get("LIBRARY_PATH", ""))
+#         log.info("Compiling libkent archive...")
+#         check_call(['make', 'build-ucsc'])
 
-        # Now, proceed to build extension modules
-        log.info("Building extension module...")
-        _build_ext.run(self)
+#         # Now, proceed to build extension modules
+#         log.info("Building extension module...")
+#         _build_ext.run(self)
 
 
 def get_ext_modules():
@@ -76,23 +76,23 @@ def get_ext_modules():
     import pkgconfig
     import sysconfig
 
-    # https://solitum.net/openssl-os-x-el-capitan-and-brew/
-    if sys.platform == "darwin":
-        os.environ['MACOSX_DEPLOYMENT_TARGET'] = \
-            sysconfig.get_config_var('MACOSX_DEPLOYMENT_TARGET')
-        os.environ['BLDSHARED'] = \
-            'gcc -bundle -undefined dynamic_lookup -arch x86_64 -g'
-        os.environ['LDSHARED'] = \
-            'gcc -bundle -undefined dynamic_lookup -arch x86_64 -g'
+    # # https://solitum.net/openssl-os-x-el-capitan-and-brew/
+    # if sys.platform == "darwin":
+    #     os.environ['MACOSX_DEPLOYMENT_TARGET'] = \
+    #         sysconfig.get_config_var('MACOSX_DEPLOYMENT_TARGET')
+    #     os.environ['BLDSHARED'] = \
+    #         'gcc -bundle -undefined dynamic_lookup -arch x86_64 -g'
+    #     os.environ['LDSHARED'] = \
+    #         'gcc -bundle -undefined dynamic_lookup -arch x86_64 -g'
 
-    if sys.platform == "linux":
-        s = '-Wl,--no-as-needed'
-        old = os.environ.get("LDFLAGS")
-        if old:
-            s = s + ' ' + old
-        os.environ["LDFLAGS"] = s
+    # if sys.platform == "linux":
+    #     s = '-Wl,--no-as-needed'
+    #     old = os.environ.get("LDFLAGS")
+    #     if old:
+    #         s = s + ' ' + old
+    #     os.environ["LDFLAGS"] = s
 
-    d = pkgconfig.parse('zlib openssl libpng')
+    d = pkgconfig.parse('zlib libpng')
 
     ext_modules = [
         Extension(

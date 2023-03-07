@@ -11,20 +11,28 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [tool.cibuildwheel]
-build = ["cp37-*", "cp38-*", "cp39-*", "cp310-*", "cp311-*"]
+build = ["cp38-*", "cp39-*", "cp310-*", "cp311-*"]
 skip = "*-musllinux*"
 
 [tool.cibuildwheel.linux]
 archs = ["x86_64", "aarch64"]
 before-all = "yum install -y gcc make zlib-devel openssl-devel libpng-devel"
+before-build = """
+export LDFLAGS="-Wl,--no-as-needed $LDFLAGS"
+make build-ucsc
+"""
 
 [tool.cibuildwheel.macos]
 archs = ["x86_64"]
 before-all = "brew install pkg-config openssl libpng"
 before-build = """
-export LDFLAGS="-L/usr/local/opt/openssl/lib"
-export CPPFLAGS="-I/usr/local/opt/openssl/include"
-export PKG_CONFIG_PATH="/usr/local/opt/openssl/lib/pkgconfig:/opt/homebrew/opt/openssl/lib/pkgconfig"
-export C_INCLUDE_PATH="/usr/local/include/libpng:/usr/local/opt/openssl/include:$C_INCLUDE_PATH"
+export PATH="/usr/local/opt/openssl@3/bin:/opt/homebrew/opt/openssl@3/bin:$PATH"
+export LDFLAGS="-L/usr/local/opt/openssl@3/lib:/opt/homebrew/opt/openssl@3/lib"
+export CPPFLAGS="-I/usr/local/opt/openssl@3/include:/opt/homebrew/opt/openssl@3/include"
+export PKG_CONFIG_PATH="/usr/local/opt/openssl@3/lib/pkgconfig:/opt/homebrew/opt/openssl@3/lib/pkgconfig"
+export C_INCLUDE_PATH="/usr/local/include/libpng:/usr/local/opt/openssl@3/include:$C_INCLUDE_PATH"
+export BLDSHARED='gcc -bundle -undefined dynamic_lookup -arch x86_64 -g'
+export LDSHARED='gcc -bundle -undefined dynamic_lookup -arch x86_64 -g'
+make build-ucsc
 """
 # [tool.cibuildwheel.windows]
