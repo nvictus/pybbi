@@ -1,38 +1,97 @@
 [build-system]
 requires = [
-    "setuptools",
-    "wheel",
-    "oldest-supported-numpy",
-    "pkgconfig",
     "Cython >=0.29; python_version<'3.8'",
     "Cython >=0.29.14; python_version=='3.8'",
     "Cython >=0.29.15; python_version>='3.9'",
+    "oldest-supported-numpy",
+    "pkgconfig",
+    "setuptools",
+    "wheel",
 ]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["bbi*"]
+
+[project]
+name = "pybbi"
+description = "Python bindings to the UCSC Big Binary (bigWig/bigBed) file library."
+requires-python = ">=3.7"
+license = {text = "MIT"}
+authors = [
+  {name = "Nezar Abdennur", email = "nabdennur@gmail.com"},
+]
+keywords = [
+    "genomics",
+    "bioinformatics",
+    "bigwig",
+    "bigbed",
+    "bigbinaryindexed",
+    "bbi",
+    "ucsc",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX",
+    "Operating System :: Unix",
+    "Operating System :: MacOS",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+
+dependencies = [
+    "numpy",
+]
+
+dynamic = ["version", "readme"]
+
+[tool.setuptools.dynamic]
+version = {attr = "bbi.__version__"}
+readme = {file = ["README.md"], content-type = "text/markdown"}
+
+[project.optional-dependencies]
+test = [
+    'pytest',
+    'pandas'
+]
+
+[project.urls]
+homepage = "https://github.com/nvictus/pybbi"
+documentation = "https://github.com/nvictus/pybbi#README.md"
+repository = "https://github.com/nvictus/pybbi"
+
 
 [tool.cibuildwheel]
 build = ["cp38-*", "cp39-*", "cp310-*", "cp311-*"]
 skip = "*-musllinux*"
 
+
 [tool.cibuildwheel.linux]
 archs = ["x86_64", "aarch64"]
 before-all = "yum install -y gcc make zlib-devel openssl-devel libpng-devel"
-before-build = """
-export LDFLAGS="-Wl,--no-as-needed $LDFLAGS"
-make build-ucsc
-"""
+before-build = "make build-ucsc"
+
+[tools.cibuildwheel.linux.environment]
+LDFLAGS = "-Wl,--no-as-needed"
+
 
 [tool.cibuildwheel.macos]
 archs = ["x86_64"]
 before-all = "brew install pkg-config openssl libpng"
-before-build = """
-export PATH="/usr/local/opt/openssl@3/bin:/opt/homebrew/opt/openssl@3/bin:$PATH"
-export LDFLAGS="-L/usr/local/opt/openssl@3/lib:/opt/homebrew/opt/openssl@3/lib"
-export CPPFLAGS="-I/usr/local/opt/openssl@3/include:/opt/homebrew/opt/openssl@3/include"
-export PKG_CONFIG_PATH="/usr/local/opt/openssl@3/lib/pkgconfig:/opt/homebrew/opt/openssl@3/lib/pkgconfig"
-export C_INCLUDE_PATH="/usr/local/include/libpng:/usr/local/opt/openssl@3/include:$C_INCLUDE_PATH"
-export BLDSHARED='gcc -bundle -undefined dynamic_lookup -arch x86_64 -g'
-export LDSHARED='gcc -bundle -undefined dynamic_lookup -arch x86_64 -g'
-make build-ucsc
-"""
-# [tool.cibuildwheel.windows]
+before-build = "make build-ucsc"
+
+[tool.cibuildwheel.macos.environment]
+LDFLAGS = "-L/usr/local/opt/openssl/lib -L/opt/homebrew/opt/openssl/lib"
+CPPFLAGS = "-I/usr/local/opt/openssl/include -I/opt/homebrew/opt/openssl/include"
+PATH = "/usr/local/opt/openssl/bin:/opt/homebrew/opt/openssl/bin:$PATH"
+PKG_CONFIG_PATH = "/usr/local/opt/openssl/lib/pkgconfig:/opt/homebrew/opt/openssl/lib/pkgconfig:$PKG_CONFIG_PATH"
+C_INCLUDE_PATH = "/usr/local/include/libpng:/usr/local/opt/openssl/include:$C_INCLUDE_PATH"
+BLDSHARED = 'gcc -bundle -undefined dynamic_lookup -arch x86_64 -g'
+LDSHARED = 'gcc -bundle -undefined dynamic_lookup -arch x86_64 -g'
