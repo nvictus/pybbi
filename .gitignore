@@ -13,3 +13,4 @@ bbi/*.c
 build/
 dist/
 tmp/
+venv/

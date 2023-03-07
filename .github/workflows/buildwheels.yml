@@ -3,6 +3,7 @@ name: Make some wheelz
 on:
   push:
     branches: [build-wheels]
+  workflow_dispatch:
 
 jobs:
   build_wheels:
