@@ -1,6 +1,7 @@
 import os
 import os.path
 import pathlib
+import sys
 
 import numpy
 import pkgconfig
@@ -9,14 +10,16 @@ from Cython.Distutils.build_ext import new_build_ext as cython_build_ext
 from setuptools import Extension, setup
 
 ARCH = os.uname().machine
-deps = pkgconfig.parse("zlib openssl libpng")
 
+deps = {}
+if "sdist" not in sys.argv:
+    deps = pkgconfig.parse("zlib openssl libpng")
 
-if not pathlib.Path("src", ARCH, "libkent.a").exists():
-    raise RuntimeError(
-        f"src/{ARCH}/libkent.a not found. "
-        "Please run `make build-ucsc`."
-    )
+    if not pathlib.Path("src", ARCH, "libkent.a").exists():
+        raise RuntimeError(
+            f"src/{ARCH}/libkent.a not found. "
+            "Please run `make build-ucsc`."
+        )
 
 
 def get_extension_modules():
@@ -37,7 +40,10 @@ def get_extension_modules():
             **deps,
         ),
     ]
-    return cythonize(ext_modules)
+    if "sdist" in sys.argv:
+        return ext_modules
+    else:
+        return cythonize(ext_modules)
 
 
 setup(
