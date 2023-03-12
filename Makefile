@@ -5,25 +5,23 @@ UNAME_S := $(shell uname -s)
 
 ifeq (${MACHTYPE},)
 	MACHTYPE:=$(shell uname -m)
-#    $(info MACHTYPE was empty, set to: ${MACHTYPE})
-endif
-ifneq (,$(findstring -,$(MACHTYPE)))
-#    $(info MACHTYPE has - sign ${MACHTYPE})
-	MACHTYPE:=$(shell uname -m)
-#    $(info MACHTYPE has - sign set to: ${MACHTYPE})
 endif
 export MACHTYPE
 
 export CC ?= gcc
 export COPTS=-g -pthread -fPIC -static
 export CFLAGS=-Wall $(shell pkg-config --static --cflags-only-other openssl zlib libpng)
+export DEFS=-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_GNU_SOURCE -DMACHTYPE_${MACHTYPE} -DUSE_SSL
 export LDFLAGS=-L${current_dir}/src/${MACHTYPE} $(shell pkg-config --static --libs openssl zlib libpng)
 export INC=-I${current_dir}/include $(shell pkg-config --static --cflags-only-I openssl zlib libpng)
-export DEFS=-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_GNU_SOURCE -DMACHTYPE_${MACHTYPE} -DUSE_SSL
 # pass through COREDUMP
 ifneq (${COREDUMP},)
 	DEFS+=-DCOREDUMP
 endif
+
+# Append values to CFLAGS and LDFLAGS
+CFLAGS += $(shell echo $$CFLAGS)
+LDFLAGS += $(shell echo $$LDFLAGS)
 
 
 all: build

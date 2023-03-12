@@ -71,27 +71,15 @@ repository = "https://github.com/nvictus/pybbi"
 [tool.cibuildwheel]
 build = ["cp38-*", "cp39-*", "cp310-*", "cp311-*"]
 skip = "*-musllinux*"
-
+build-verbosity = 3
 
 [tool.cibuildwheel.linux]
 archs = ["x86_64", "aarch64"]
 before-all = "yum install -y gcc make zlib-devel openssl-devel libpng-devel"
-before-build = "make build-ucsc"
-
-[tools.cibuildwheel.linux.environment]
-LDFLAGS = "-Wl,--no-as-needed"
 
 
 [tool.cibuildwheel.macos]
-archs = ["x86_64"]
-before-all = "brew install pkg-config openssl libpng"
-before-build = "make build-ucsc"
-
-[tool.cibuildwheel.macos.environment]
-LDFLAGS = "-L/usr/local/opt/openssl/lib -L/opt/homebrew/opt/openssl/lib"
-CPPFLAGS = "-I/usr/local/opt/openssl/include -I/opt/homebrew/opt/openssl/include"
-PATH = "/usr/local/opt/openssl/bin:/opt/homebrew/opt/openssl/bin:$PATH"
-PKG_CONFIG_PATH = "/usr/local/opt/openssl/lib/pkgconfig:/opt/homebrew/opt/openssl/lib/pkgconfig:$PKG_CONFIG_PATH"
-C_INCLUDE_PATH = "/usr/local/include/libpng:/usr/local/opt/openssl/include:$C_INCLUDE_PATH"
-BLDSHARED = 'gcc -bundle -undefined dynamic_lookup -arch x86_64 -g'
-LDSHARED = 'gcc -bundle -undefined dynamic_lookup -arch x86_64 -g'
+archs = ["x86_64"]  # "arm64" is not yet supported by GitHub Actions (Needs M1 runner)
+before-all = """
+brew install pkg-config openssl libpng  # -> /usr/local (x86_64)
+"""
