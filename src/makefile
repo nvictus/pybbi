@@ -54,17 +54,21 @@ $(MACHTYPE)/libkent.a: $(O) $(MACHTYPE)
 $(MACHTYPE):
 	mkdir $(MACHTYPE)
 
-test:
-	cd tests && ${MAKE} test
-
-clean:
-	rm -f ${O} $(MACHTYPE)/libkent.a
-	cd tests && ${MAKE} clean
-
-tags:
-	etags ../inc/*.h ../lib/*.h ../lib/*.c  ../hg/inc/*.h ../hg/lib/*.h ../hg/lib/*.c ../hg/hgTracks/*.c ../hg/hgc/*.c ../hg/hgTrackUi/*.c
+.PHONY: all
+all: $(MACHTYPE)/libkent.a
 
 %.o: %.c
 	${CC} ${COPTS} ${CFLAGS} ${DEFS} ${LDFLAGS} ${INC} -o $@ -c $<
 
-all: $(MACHTYPE)/libkent.a
+.PHONY: test
+test:
+	cd tests && ${MAKE} test
+
+.PHONY: clean
+clean:
+	rm -f ${O} $(MACHTYPE)/libkent.a
+	cd tests && ${MAKE} clean
+
+.PHONY: tags
+tags:
+	etags ../inc/*.h ../lib/*.h ../lib/*.c  ../hg/inc/*.h ../hg/lib/*.h ../hg/lib/*.c ../hg/hgTracks/*.c ../hg/hgc/*.c ../hg/hgTrackUi/*.c
