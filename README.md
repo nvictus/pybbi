@@ -10,7 +10,7 @@ This provides read-level access to local and remote bigWig and bigBed files but 
 
 ## Installation ##
 
-Wheels for `pybbi` are available on PyPI for Python 3.6, 3.7, 3.8, 3.9, 3.10 on Linux and Mac OSX platforms under x86-64 architecture.
+Wheels for `pybbi` are available on PyPI for Python 3.8, 3.9, 3.10, 3.11 on Linux (x86_64 and aarch64) and Mac OSX (x86_64/Intel). Apple Silicon (arm64) wheels will be made available once M1 runners are available in GitHub Actions.
 
 ```
 $ pip install pybbi
@@ -79,16 +79,16 @@ BBIFile.stackup(chroms, starts, ends, [bins [, missing [, oob, [, summary]]]]) -
 
 The original function-based API is still available:
 
-```
-bbi.is_bbi(path) -> bool
-bbi.is_bigwig(path) -> bool
-bbi.is_bigbed(path) -> bool
-bbi.chromsizes(path) -> OrderedDict
-bbi.zooms(path) -> list
-bbi.info(path) -> dict
-bbi.fetch_intervals(path, chrom, start, end, iterator) -> interval iterator or pandas.DataFrame
-bbi.fetch(path, chrom, start, end, [bins [, missing [, oob, [, summary]]]]) -> 1D array
-bbi.stackup(path, chroms, starts, ends, [bins [, missing [, oob, [, summary]]]]) -> 2D array
+```python
+bbi.is_bbi(path: str) -> bool
+bbi.is_bigwig(path: str) -> bool
+bbi.is_bigbed(path:str) -> bool
+bbi.chromsizes(path: str) -> OrderedDict
+bbi.zooms(path: str) -> list
+bbi.info(path: str) -> dict
+bbi.fetch_intervals(path: str, chrom: str, start: int, end: int, iterator: bool) -> Union[Iterable, pd.DataFrame]
+bbi.fetch(path: str, chrom: str, start: int, end: int, [bins: int [, missing: float [, oob: float, [, summary: str]]]]) -> np.array[1, 'float64']
+bbi.stackup(path: str, chroms: np.array, starts: np.array, ends: np.array, [bins: int [, missing: float [, oob: float, [, summary: str]]]]) -> np.array[2, 'float64']
 ```
 
 See the docstrings for complete documentation.
@@ -111,14 +111,16 @@ This library provides bindings to the reference UCSC bbi library code. Check out
 If wheels for your platform or Python version aren't available or you want to develop, you'll need to install `pybbi` from source. The source distribution on PyPI ships with (slightly modified) kent utils source, which will compile before the extension module is built.
 
 Requires
-- Linux/MacOS
-- C compiler, zlib, pthreads, libpng, openssl, make
-- Python 3.4+
+- Platform: Linux or Darwin (Windows Subsystem for Linux seems to work too)
+- pthreads, zlib, libpng, openssl, make, pkg-config
+- Python 3.6+
 - `numpy` and `cython`
 
-On fresh Ubuntu instance, you'll need `build-essential`, `make`, `zlib1g-dev`, `libssl-dev`, `libpng16-dev`. It seems to work on the Windows Subsystem for Linux too.
+For example, on a fresh Ubuntu instance, you'll need `build-essential`, `make`, `pkg-config`, `zlib1g-dev`, `libssl-dev`, `libpng16-dev`.
 
-On a Centos/RedHat (rpm) system you'll need `gcc`, `make`, `zlib-devel`, `openssl-devel`, `libpng-devel`.
+On a Centos/RedHat (rpm) system you'll need `gcc`, `make`, `pkg-config`, `zlib-devel`, `openssl-devel`, `libpng-devel`.
+
+On a Mac, you'll need Xcode and to `brew install pkg-config openssl libpng`.
 
 For development, clone the repo and install in editable mode:
 
@@ -128,13 +130,7 @@ $ cd pybbi
 $ pip install -e .
 ```
 
-### Troubleshooting
-
-On OSX, you may get errors about missing header files (e.g., `png.h`, `openssl/sha.h`), which even if installed may not be located in standard include locations. Either [create the required symlinks](https://www.anintegratedworld.com/mac-osx-fatal-error-opensslsha-h-file-not-found/) or update the `C_INCLUDE_PATH` environment variable accordingly before installing pybbi.
-
-```bash
-export C_INCLUDE_PATH="/usr/local/include/libpng:/usr/local/opt/openssl/include:$C_INCLUDE_PATH"
-```
+You can use the `ARCH` environment variable to specify a target architecture or `ARCHFLAGS` on a Mac.
 
 ### Notes
 
