@@ -2,21 +2,20 @@
 #cython: embedsignature=True
 from urllib.request import urlopen
 from urllib.parse import urlparse
-from collections import OrderedDict
 import io
 import os.path as op
-import sys
-import warnings
 
 import numpy as np
 
 from libc.math cimport sqrt
-from .cbbi cimport asObject
+from .cbbi cimport (
+    asObject, bbiSumMean, bbiSumMax, bbiSumMin, bbiSumCoverage, 
+    bbiSumStandardDeviation, bbiSumSum
+)
 
 bytes_to_int = int.from_bytes
 
-
-cpdef dict BBI_SUMMARY_TYPES = {
+cdef dict BBI_SUMMARY_TYPES = {
     'mean': bbiSumMean,
     'max': bbiSumMax,
     'min': bbiSumMin,
@@ -24,7 +23,6 @@ cpdef dict BBI_SUMMARY_TYPES = {
     'std': bbiSumStandardDeviation,
     'sum': bbiSumSum,
 }
-
 
 # Map AutoSql types to pandas-compatible dtypes
 # http://genomewiki.ucsc.edu/index.php/AutoSql
@@ -338,7 +336,7 @@ cdef class BBIFile:
         # clean up
         bbiChromInfoFreeList(&chromList)
 
-        return OrderedDict(c_list)
+        return dict(c_list)
 
     @property
     def zooms(self):
@@ -403,9 +401,9 @@ cdef class BBIFile:
         Read the signal data in a bbi file overlapping a genomic query interval
         into a numpy array.
 
-        If a number of bins is requested, this will interpolate the file's stored
-        summary data from the closest available zoom level. Otherwise, the data
-        is returned at base pair resolution (default).
+        If a number of bins is requested, this will interpolate the file's 
+        stored summary data from the closest available zoom level. Otherwise, 
+        the data is returned at base pair resolution (default).
 
         Parameters
         ----------
@@ -416,8 +414,8 @@ cdef class BBIFile:
             track is not truncated but treated as out of bounds.
         end : int
             End coordinate. If end is less than zero, the end is set to the
-            chromosome size. If end is greater than the chromosome size, the end of
-            the track is not truncated but treated as out of bounds.
+            chromosome size. If end is greater than the chromosome size, the 
+            end of the track is not truncated but treated as out of bounds.
         bins : int, optional
             Number of bins to divide the query interval into for coarsegraining.
             Default (-1) means no summarization (i.e., 1 bp bins).
@@ -436,13 +434,17 @@ cdef class BBIFile:
 
         Notes
         -----
-        A BigWig file encodes a step function, and the value at a base
-        is given by the "value" field of the unique interval that contains that
-        base.
+        A BigWig file encodes a step function, and the value at a base is given 
+        by the quantitative "value" field of the unique interval that contains 
+        that base.
 
         A BigBed file encodes a collection of (possibly overlapping) intervals,
-        and the value at a base is given by the coverage (i.e. pileup) of
-        intervals that contain that base.
+        and the "signal value" at a base is given by the coverage (i.e., pileup) 
+        of the intervals that overlap that base.
+
+        See Also
+        --------
+        stackup : Stack signal tracks from many query intervals into a matrix
 
         """
         if self.bbi == NULL:
@@ -466,7 +468,7 @@ cdef class BBIFile:
         if start > chromSize:
             raise ValueError(
                 "Start exceeds the chromosome length, {}.".format(chromSize))
-        cdef length = end - start
+        cdef int length = end - start
         if length < 0:
             raise ValueError(
                 "Interval cannot have negative length:"
@@ -512,22 +514,25 @@ cdef class BBIFile:
         str summary='mean'
     ):
         """
-        Vertically stack signal tracks from equal-length bbi query intervals.
+        Vertically stack signal tracks from many query intervals into a matrix.
 
         Parameters
         ----------
-        chrom : array-like of str
-            Chromosome names.
-        start : array-like of int
+        chroms : array-like of str
+            Chromosome names of the query intervals.
+        starts : array-like of int
             Start coordinates. If start is less than zero, the beginning of the
             track is not truncated but treated as out of bounds.
-        end : array-like of int
+        ends : array-like of int
             End coordinates. If end is less than zero, the end is set to the
-            chromosome size. If end is greater than the chromosome size, the end of
-            the track is not truncated but treated as out of bounds.
+            chromosome size. If end is greater than the chromosome size, the 
+            end of the track is not truncated but treated as out of bounds.
         bins : int
             Number of bins to summarize the data. Default (-1) means no
-            aggregation.
+            aggregation: each bin is 1 base pair and the query intervals must
+            have the same length. If bins > 0, the input query intervals can 
+            have different lengths, and the data will be rescaled to the same 
+            number of bins.
         missing : float
             Fill-in value for unreported data in valid regions. Default is 0.
         oob : float
@@ -539,7 +544,13 @@ cdef class BBIFile:
 
         Returns
         -------
-        out : 2D ndarray
+        out : 2D ndarray of float64 (n_intervals, n_bins)
+
+        Notes
+        -----
+        Intervals must have the same length, unless ``bins`` is specified, in 
+        which case the data from each interval will be interpolated to the same 
+        number of bins (e.g., gene bodies).
 
         See Also
         --------
@@ -653,14 +664,15 @@ cdef class BBIFile:
         if start > chromSize:
             raise ValueError(
                 "Start exceeds the chromosome length, {}.".format(chromSize))
-        cdef length = end - start
+        cdef int length = end - start
         if length < 0:
             raise ValueError(
                 "Interval cannot have negative length:"
                 " start = {}, end = {}.".format(start, end))
 
         # clip the query range
-        cdef int validStart = start, validEnd = end
+        cdef int validStart = start
+        cdef int validEnd = end
         if start < 0:
             validStart = 0
         if end > chromSize:
@@ -791,7 +803,8 @@ cdef inline void array_query_full(
     double oob
 ):
     # Clip the query range
-    cdef int validStart = start, validEnd = end
+    cdef int validStart = start
+    cdef int validEnd = end
     if start < 0:
         validStart = 0
     if end > chromSize:
@@ -846,7 +859,8 @@ cdef inline void array_query_summarized(
 ):
 
     # Clip the query range
-    cdef int validStart = start, validEnd = end
+    cdef int validStart = start
+    cdef int validEnd = end
     if start < 0:
         validStart = 0
     if end > chromSize:
@@ -863,7 +877,7 @@ cdef inline void array_query_summarized(
     # Create and populate summary elements
     # elements is allocated
     cdef boolean result = False
-    cdef bbiSummaryElement *elements
+    cdef bbiSummaryElement *elements = NULL
     AllocArray(elements, nbins)
     if zoomObj != NULL:
         result = _bbiSummariesFromZoom(
