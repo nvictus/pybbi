@@ -64,12 +64,12 @@ For a single range query:
 BBIFile.fetch(chrom, start, end, [bins [, missing [, oob, [, summary]]]]) -> 1D numpy array
 ```
 
-For a list of equal-length segments (i.e. to produce a stacked heatmap):
+To produce a stacked heatmap from a list of (1) equal-length intervals or (2) arbitrary-length intervals with `bins` specified:
 ```
 BBIFile.stackup(chroms, starts, ends, [bins [, missing [, oob, [, summary]]]]) -> 2D numpy array
 ```
 
-* **Summary** querying is supported by specifying the number of `bins` for coarsening. The `summary` statistic can be one of: 'mean', 'min', 'max', 'cov', 'std', 'or 'sum'. (default = 'mean').
+* **Summary** querying is supported by specifying the number of `bins` for coarsening. The `summary` statistic can be one of: 'mean', 'min', 'max', 'cov', 'std', 'or 'sum'. (default = 'mean'). Intervals need not have the same length, in which case the data from each interval will be interpolated to the same number of bins (e.g., gene bodies).
 
 * **Missing** data can be filled with a custom fill value, `missing` (default = 0). 
 
