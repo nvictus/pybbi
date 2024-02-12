@@ -25,7 +25,7 @@ def chromsizes(inFile):
 
     Returns
     -------
-    OrderedDict (str -> int)
+    dict[str, int]
 
     """
     with cbbi.open(inFile) as f:
@@ -44,7 +44,7 @@ def zooms(inFile):
 
     Returns
     -------
-    list of int
+    list[int]
 
     """
     with cbbi.open(inFile) as f:
@@ -70,26 +70,38 @@ def info(inFile):
 
 
 @documented_by(cbbi.BBIFile.fetch)
-def fetch(inFile, chrom, start, end, bins=-1, missing=0.0, oob=np.nan, summary="mean"):
-    with cbbi.open(inFile) as f:
-        return f.fetch(chrom, start, end, bins, missing, oob, summary)
-
-
-@documented_by(cbbi.BBIFile.stackup)
-def stackup(
-    inFile, chroms, starts, ends, bins=-1, missing=0.0, oob=np.nan, summary="mean"
-):
-    with cbbi.open(inFile) as f:
-        return f.stackup(chroms, starts, ends, bins, missing, oob, summary)
-
-
-@documented_by(cbbi.BBIFile.fetch_intervals)
-def fetch_intervals(
+def fetch(
     inFile,
     chrom,
     start,
     end,
-    iterator=True
+    bins=-1,
+    missing=0.0,
+    oob=np.nan,
+    summary="mean",
+    exact=False,
 ):
+    with cbbi.open(inFile) as f:
+        return f.fetch(chrom, start, end, bins, missing, oob, summary, exact)
+
+
+@documented_by(cbbi.BBIFile.stackup)
+def stackup(
+    inFile,
+    chroms,
+    starts,
+    ends,
+    bins=-1,
+    missing=0.0,
+    oob=np.nan,
+    summary="mean",
+    exact=False,
+):
+    with cbbi.open(inFile) as f:
+        return f.stackup(chroms, starts, ends, bins, missing, oob, summary, exact)
+
+
+@documented_by(cbbi.BBIFile.fetch_intervals)
+def fetch_intervals(inFile, chrom, start, end, iterator=True):
     with cbbi.open(inFile) as f:
         return f.fetch_intervals(chrom, start, end, iterator)

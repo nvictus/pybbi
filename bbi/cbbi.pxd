@@ -256,7 +256,7 @@ cdef extern from "bigWig.h":
         int start,
         int end,
         bbiSummaryType summaryType,
-        double defaultVal);
+        double defaultVal)
     boolean bigWigSummaryArray(
         bbiFile *bwf,
         char *chrom,
@@ -312,7 +312,7 @@ cdef extern from "bigBed.h":
         bits32 start,
         bits32 end,
         int summarySize,
-        bbiSummaryElement *summary);
+        bbiSummaryElement *summary)
     char *bbiCachedChromLookup(
         bbiFile *bbi,
         int chromId,
@@ -320,7 +320,7 @@ cdef extern from "bigBed.h":
         char *chromBuf,
         int chromBufSize)
     char *bigBedAutoSqlText(bbiFile *bbi)
-    asObject *bigBedAs(bbiFile *bbi);
+    asObject *bigBedAs(bbiFile *bbi)
     asObject *bigBedAsOrDefault(bbiFile *bbi)
     asObject *bigBedFileAsObjOrDefault(char *fileName)
 
