@@ -9,7 +9,7 @@ import numpy as np
 
 from libc.math cimport sqrt
 from .cbbi cimport (
-    asObject, bbiSumMean, bbiSumMax, bbiSumMin, bbiSumCoverage, 
+    asObject, bbiSumMean, bbiSumMax, bbiSumMin, bbiSumCoverage,
     bbiSumStandardDeviation, bbiSumSum
 )
 
@@ -117,7 +117,6 @@ def is_bbi(inFile):
     Returns
     -------
     bool
-
     """
     return _read_sig(inFile) > 0
 
@@ -134,7 +133,6 @@ def is_bigwig(inFile):
     Returns
     -------
     bool
-
     """
     return _read_sig(inFile) == bigWigSig
 
@@ -151,7 +149,6 @@ def is_bigbed(inFile):
     Returns
     -------
     bool
-
     """
     return _read_sig(inFile) == bigBedSig
 
@@ -168,7 +165,6 @@ def open(str inFile):
     Returns
     -------
     BBIFile
-
     """
     return BBIFile(inFile)
 
@@ -179,7 +175,6 @@ cdef class BBIFile:
 
     The resource may be a bigWig or a bigBed file.
     BigBed AutoSql schemas are supported.
-
     """
     cdef bbiFile *bbi
     cdef bits32 sig
@@ -395,15 +390,16 @@ cdef class BBIFile:
         int bins=-1,
         double missing=0.0,
         double oob=np.nan,
-        str summary='mean'
+        str summary='mean',
+        bint exact=False,
     ):
         """
-        Read the signal data in a bbi file overlapping a genomic query interval
+        Read the signal data in a BBI file overlapping a genomic query interval
         into a numpy array.
 
-        If a number of bins is requested, this will interpolate the file's 
-        stored summary data from the closest available zoom level. Otherwise, 
-        the data is returned at base pair resolution (default).
+        If a number of bins is requested, this will return a summary statistic
+        for each bin. Otherwise, the data is returne unsummarized at base pair
+        resolution (default).
 
         Parameters
         ----------
@@ -414,19 +410,23 @@ cdef class BBIFile:
             track is not truncated but treated as out of bounds.
         end : int
             End coordinate. If end is less than zero, the end is set to the
-            chromosome size. If end is greater than the chromosome size, the 
+            chromosome size. If end is greater than the chromosome size, the
             end of the track is not truncated but treated as out of bounds.
         bins : int, optional
             Number of bins to divide the query interval into for coarsegraining.
             Default (-1) means no summarization (i.e., 1 bp bins).
-        missing : float, optional
+        missing : float, optional [default: 0.0]
             Fill-in value for unreported data in valid regions. Default is 0.
-        oob : float, optional
+        oob : float, optional [default: NaN]
             Fill-in value for out-of-bounds regions. Default is NaN.
-        summary : str, optional
-            Summary statistic to use if summarizing. Options are 'mean', 'min',
-            'max', 'cov' (coverage), and 'std' (standard deviation). Default is
-            'mean'.
+        summary : str, optional [default: 'mean']
+            Summary statistic to use if ``bins`` is specified. Options are
+            'mean', 'sum', 'min', 'max', 'cov' (coverage), and 'std'
+            (standard deviation). Default is 'mean'.
+        exact : bool, optional [default: False]
+            If True and ``bins`` is specified, return exact summary statistic
+            values instead of interpolating from the optimal zoom level.
+            Default is False.
 
         Returns
         -------
@@ -434,18 +434,25 @@ cdef class BBIFile:
 
         Notes
         -----
-        A BigWig file encodes a step function, and the value at a base is given 
-        by the quantitative "value" field of the unique interval that contains 
-        that base.
+        Values returned for a BigWig file are derived from its quantitative
+        "value" field. A BigWig file encodes a step function, and the value at
+        a base is given by the signal value of the unique interval that
+        contains that base.
 
-        A BigBed file encodes a collection of (possibly overlapping) intervals,
-        and the "signal value" at a base is given by the coverage (i.e., pileup) 
-        of the intervals that overlap that base.
+        Values returned for a BigBed file are derived from the coverage
+        (i.e., pileup) of the intervals. A BigBed file encodes a collection
+        of (possibly overlapping) intervals which may or may not be associated
+        with quantitative scores. The "value" at given base used here
+        summarizes the number of intervals overlapping that base, not a score.
+
+        If a number of bins is requested and ``exact`` is False, the summary
+        data is interpolated from the closest available zoom level. If you
+        need accurate summary data and are okay with small trade-off in speed,
+        set ``exact`` to True.
 
         See Also
         --------
         stackup : Stack signal tracks from many query intervals into a matrix
-
         """
         if self.bbi == NULL:
             raise OSError("File closed")
@@ -495,7 +502,7 @@ cdef class BBIFile:
                         set(BBI_SUMMARY_TYPES.keys())))
             array_query_summarized(
                 out, bins, self.bbi, fetcher,
-                chromName, start, end, chromSize, oob, summary_type)
+                chromName, start, end, chromSize, oob, summary_type, exact)
         else:
             array_query_full(
                 out, bins, self.bbi, fetcher,
@@ -511,7 +518,8 @@ cdef class BBIFile:
         int bins=-1,
         double missing=0.0,
         double oob=np.nan,
-        str summary='mean'
+        str summary='mean',
+        bint exact=False,
     ):
         """
         Vertically stack signal tracks from many query intervals into a matrix.
@@ -525,13 +533,13 @@ cdef class BBIFile:
             track is not truncated but treated as out of bounds.
         ends : array-like of int
             End coordinates. If end is less than zero, the end is set to the
-            chromosome size. If end is greater than the chromosome size, the 
+            chromosome size. If end is greater than the chromosome size, the
             end of the track is not truncated but treated as out of bounds.
         bins : int
             Number of bins to summarize the data. Default (-1) means no
             aggregation: each bin is 1 base pair and the query intervals must
-            have the same length. If bins > 0, the input query intervals can 
-            have different lengths, and the data will be rescaled to the same 
+            have the same length. If bins > 0, the input query intervals can
+            have different lengths, and the data will be rescaled to the same
             number of bins.
         missing : float
             Fill-in value for unreported data in valid regions. Default is 0.
@@ -541,6 +549,10 @@ cdef class BBIFile:
             Summary statistic to use if summarizing. Options are 'mean', 'min',
             'max', 'cov' (coverage), and 'std' (standard deviation). Default is
             'mean'.
+        exact : bool, optional [default: False]
+            If True and ``bins`` is specified, return exact summary statistic
+            values instead of interpolating from the optimal zoom level.
+            Default is False.
 
         Returns
         -------
@@ -548,14 +560,20 @@ cdef class BBIFile:
 
         Notes
         -----
-        Intervals must have the same length, unless ``bins`` is specified, in 
-        which case the data from each interval will be interpolated to the same 
-        number of bins (e.g., gene bodies).
+        If not summarizing, the input intervals must have the same length.
+
+        If a number of bins is requested, intervals may have variable lengths
+        and the data from each interval will be rescaled to the same number
+        of bins (e.g., aligning gene bodies).
+
+        If a number of bins is requested and ``exact`` is False, the summary
+        data is interpolated from the closest available zoom level. If you
+        need accurate summary data and are okay with small trade-off in
+        speed, set ``exact`` to True.
 
         See Also
         --------
         fetch : Fetch the signal track of a single interval
-
         """
         if self.bbi == NULL:
             raise OSError("File closed")
@@ -620,13 +638,14 @@ cdef class BBIFile:
                         )
                 array_query_summarized(
                     out[i, :], bins, self.bbi, fetcher,
-                    chromName, start, end, chromSize, oob, summary_type
+                    chromName, start, end, chromSize, oob, summary_type,
+                    exact
                 )
         return out
 
     def fetch_intervals(self, str chrom, int start, int end, bint iterator=False):
         """
-        Return an iterator or data frame of feature intervals overlapping a 
+        Return an iterator or data frame of feature intervals overlapping a
         specified genomic query interval.
 
         Parameters
@@ -639,15 +658,14 @@ cdef class BBIFile:
             End coordinate. If end is less than zero, the end is set to the
             chromosome size.
         iterator : bool, optional
-            If True, return an iterator that provides records as tuples. For 
-            bigBeds, extra BED fields will be returned as unparsed strings. If 
-            False, return a DataFrame with all columns parsed according to the 
+            If True, return an iterator that provides records as tuples. For
+            bigBeds, extra BED fields will be returned as unparsed strings. If
+            False, return a DataFrame with all columns parsed according to the
             file's autosql schema.
 
         Returns
         -------
         pandas.DataFrame or BigWigIntervalIterator or BigBedIntervalIterator
-
         """
         if self.bbi == NULL:
             raise OSError("File closed")
@@ -700,9 +718,53 @@ cdef class BBIFile:
 
         return df
 
+    def fetch_summaries(self, str chrom, int start, int end, int zoom=0):
+        """
+        Return a DataFrame of complete summary statistic bins at a specific
+        zoom level overlapping a genomic query interval.
+        """
+        if self.bbi == NULL:
+            raise OSError("File closed")
+
+        cdef bytes chromName = chrom.encode('ascii')
+
+        if zoom < 0 or zoom >= len(self.zooms):
+            raise ValueError(f"Zoom level {zoom} does not exist")
+
+        cdef bbiZoomLevel *zoomObj = NULL
+        cdef bbiZoomLevel *level = self.bbi.levelList
+        cdef int i = 0
+        while level != NULL:
+            if zoom == i:
+                zoomObj = level
+                break
+            level = level.next
+            i += 1
+
+        return get_zoom_table(self.bbi, zoomObj, chromName, start, end)
+
+    def best_zoom(self, str chrom, int start, int end, int bins):
+        cdef int baseSize = end - start
+        cdef int stepSize = baseSize // bins
+        cdef int zoomLevel = stepSize // 2
+        if zoomLevel < 0:
+            zoomLevel = 0
+
+        cdef bbiZoomLevel *zoomObj = bbiBestZoom(self.bbi.levelList, zoomLevel)
+        if zoomObj == NULL:
+            return None
+
+        cdef int binsize = zoomObj.reductionLevel
+        cdef int i = 0
+        for i, resolution in enumerate(self.zooms):
+            if resolution == binsize:
+                break
+        return i
+
+
 
 cdef class BigWigIntervalIterator:
-    
+
     cdef str chrom
     cdef int valid_start
     cdef int valid_end
@@ -733,7 +795,7 @@ cdef class BigWigIntervalIterator:
             self.chrom, self.interval.start, self.interval.end, self.interval.val
         )
         self.interval = self.interval.next
-        
+
         return out
 
     def __dealloc__(self):
@@ -744,7 +806,7 @@ cdef class BigWigIntervalIterator:
 
 
 cdef class BigBedIntervalIterator:
-    
+
     cdef str chrom
     cdef int valid_start
     cdef int valid_end
@@ -757,7 +819,7 @@ cdef class BigBedIntervalIterator:
         self.chrom = chromName.decode('ascii')
         self.valid_start = validStart
         self.valid_end = validEnd
-        
+
         # interval list is allocated out of lm
         self.lm = lmInit(0)
         self.interval = bigBedIntervalQuery(
@@ -781,7 +843,7 @@ cdef class BigBedIntervalIterator:
             restTup = ()
 
         out = (self.chrom, self.interval.start, self.interval.end, *restTup)
-        self.interval = self.interval.next        
+        self.interval = self.interval.next
         return out
 
     def __dealloc__(self):
@@ -789,6 +851,84 @@ cdef class BigBedIntervalIterator:
             self.interval = NULL
         if self.lm != NULL:
             lmCleanup(&self.lm)
+
+
+cdef get_zoom_table(
+    bbiFile *bbi,
+    bbiZoomLevel *zoomObj,
+    bytes chromName,
+    int start,
+    int end,
+):
+    """
+    Get the summary elements overlapping the query interval for the given zoom level
+    """
+    cdef int chromId = bbiChromId(bbi, chromName)
+    cdef int chromSize = bbiChromSize(bbi, chromName)
+    if chromSize == 0:
+        raise KeyError(f"Chromosome not found: {chromName}")
+
+    # Clip the query range
+    cdef int validStart = start
+    cdef int validEnd = end
+    if start < 0:
+        validStart = 0
+    if end > chromSize:
+        validEnd = chromSize
+
+    # Find appropriate zoom-level summary data and populate a list of summaries
+    # summList is allocated and freed
+    cdef bbiSummary *summList = bbiSummariesInRegion(
+        zoomObj, bbi, chromId, validStart, validEnd
+    )
+    cdef int summ_start
+    cdef int summ_end
+    cdef int summ_validCount
+    cdef float summ_min
+    cdef float summ_max
+    cdef float summ_sum
+    cdef float summ_sumSquares
+
+    cdef list summary_bins = []
+    cdef bbiSummary *summ = summList
+    while summ != NULL:
+        summ_start = summ.start
+        summ_end = summ.end
+        summ_validCount = summ.validCount
+        summ_min = summ.minVal
+        summ_max = summ.maxVal
+        summ_sum = summ.sumData
+        summ_sumSquares = summ.sumSquares
+        summary_bins.append(
+            (
+                chromName.decode('ascii'),
+                summ_start,
+                summ_end,
+                summ_validCount,
+                summ_min,
+                summ_max,
+                summ_sum,
+                summ_sumSquares,
+            )
+        )
+        summ = summ.next
+    slFreeList(&summList)
+
+    import pandas as pd
+
+    return pd.DataFrame(
+        summary_bins,
+        columns=[
+            "chrom",
+            "start",
+            "end",
+            "validCount",
+            "min",
+            "max",
+            "sum",
+            "sumSquares",
+        ],
+    )
 
 
 cdef inline void array_query_full(
@@ -855,7 +995,8 @@ cdef inline void array_query_summarized(
     int end,
     int chromSize,
     double oob,
-    bbiSummaryType summaryType
+    bbiSummaryType summaryType,
+    boolean exact
 ):
 
     # Clip the query range
@@ -866,16 +1007,20 @@ cdef inline void array_query_summarized(
     if end > chromSize:
         validEnd = chromSize
 
-    # Get the closest zoom level less than what we're looking for
-    cdef int baseSize = end - start
-    cdef int stepSize = baseSize // nbins
-    cdef int zoomLevel = stepSize // 2
-    if zoomLevel < 0:
-        zoomLevel = 0
-    cdef bbiZoomLevel *zoomObj = bbiBestZoom(bbi.levelList, zoomLevel)
+    # If not exact, get the closest zoom level less than what we're looking for
+    cdef int baseSize
+    cdef int stepSize
+    cdef int zoomLevel
+    cdef bbiZoomLevel *zoomObj = NULL
+    baseSize = end - start
+    stepSize = baseSize // nbins
+    if not exact:
+        zoomLevel = stepSize // 2
+        if zoomLevel < 0:
+            zoomLevel = 0
+        zoomObj = bbiBestZoom(bbi.levelList, zoomLevel)
 
-    # Create and populate summary elements
-    # elements is allocated
+    # Allocate the elements array and create and populate summary elements
     cdef boolean result = False
     cdef bbiSummaryElement *elements = NULL
     AllocArray(elements, nbins)
