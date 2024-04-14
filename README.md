@@ -48,11 +48,17 @@ Note: `BBIFile.schema['dtypes']` provides numpy data types for the fields in a b
 
 ### Interval output
 
-The actual intervals in a bigWig or bigBed can be retrieved as a pandas dataframe or as an iterator over records as tuples. The pandas output is parsed according to the file's schema.
+The actual interval records in a bigWig or bigBed can be retrieved as a pandas dataframe or as an iterator over records as tuples. The pandas output is parsed according to the file's schema.
 
 ```
 BBIFile.fetch_intervals(chrom, start, end) -> pandas.DataFrame
 BBIFile.fetch_intervals(chrom, start, end, iterator=True) -> interval iterator
+```
+
+Summary bin records at each zoom level are also accessible.
+
+```
+BBIFile.fetch_summaries(chrom, start, end, zoom) -> pandas.DataFrame
 ```
 
 ### Array output
