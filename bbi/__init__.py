@@ -16,4 +16,16 @@ from ._bbi import (
 
 del cbbi, _bbi
 
-__version__ = '0.3.6'
+__version__ = '0.4.0'
+__all__ = [
+    'is_bbi',
+    'is_bigwig',
+    'is_bigbed',
+    'open',
+    'info',
+    'chromsizes',
+    'zooms',
+    'fetch_intervals',
+    'fetch',
+    'stackup',
+]
