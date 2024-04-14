@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-from __future__ import division, print_function
 import os.path as op
 import numpy as np
 
@@ -49,6 +47,12 @@ def test_sigs():
         assert not f.is_bigwig
         assert f.is_bigbed
         assert f.is_remote
+
+
+def test_aws_403_redirect():
+    # See https://stat.ethz.ch/pipermail/bioc-devel/2016-May/009241.html
+    url = 'https://www.encodeproject.org/files/ENCFF620UMO/@@download/ENCFF620UMO.bigWig'
+    bbi.open(url).fetch('chr21', 0, 1000)
 
 
 @pytest.mark.parametrize('uri', bbi_paths_and_urls)
@@ -184,7 +188,8 @@ def test_stackup(path):
     assert x.shape == (2, 10)
 
 
-def test_aws_403_redirect():
-    # See https://stat.ethz.ch/pipermail/bioc-devel/2016-May/009241.html
-    url = 'https://www.encodeproject.org/files/ENCFF620UMO/@@download/ENCFF620UMO.bigWig'
-    bbi.open(url).fetch('chr21', 0, 1000)
+@pytest.mark.parametrize('path', bbi_paths)
+def test_fetch_zoom_records(path):
+    with bbi.open(path) as f:
+        df = f.fetch_summaries('chr21', 0, 10000000)
+        assert len(df) > 0
