@@ -28,7 +28,7 @@ jobs:
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.12.0
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v3
         with:
           path: ./wheelhouse/*.whl
 
@@ -52,7 +52,7 @@ jobs:
       - name: Build sdist
         run: python setup.py sdist 
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v3
         with:
           path: dist/*.tar.gz
 
@@ -62,7 +62,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v3
         with:
           # unpacks default artifact into dist/
           # if `name: artifact` is omitted, the action will create extra parent dir
