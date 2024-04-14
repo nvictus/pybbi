@@ -712,7 +712,7 @@ cdef class BBIFile:
             df = pd.DataFrame(list(it), columns=self.schema['columns'])
             for col, dtype in self.schema['dtypes'].items():
                 try:
-                    df[col] = df[col].astype(dtype)
+                    df.loc[:, col] = df[col].astype(dtype)
                 except:
                     pass
 
@@ -720,8 +720,33 @@ cdef class BBIFile:
 
     def fetch_summaries(self, str chrom, int start, int end, int zoom=0):
         """
-        Return a DataFrame of complete summary statistic bins at a specific
-        zoom level overlapping a genomic query interval.
+        Return a DataFrame of complete summary statistic bins overlapping a
+        genomic query interval at a specific zoom level.
+
+        Parameters
+        ----------
+        chrom : str
+            Chromosome name.
+        start : int
+            Start coordinate.
+        end : int
+            End coordinate. If end is less than zero, the end is set to the
+            chromosome size.
+        zoom : int, optional
+            Zoom level. Default is 0.
+
+        Returns
+        -------
+        pandas.DataFrame
+
+        Notes
+        -----
+        The summary fields are 'validCount', 'min', 'max', 'sum', 'sumSquares'.
+
+        See Also
+        --------
+        fetch : Fetch the signal track of a single interval
+        fetch_intervals : Fetch feature intervals overlapping a genomic interval
         """
         if self.bbi == NULL:
             raise OSError("File closed")
@@ -760,7 +785,6 @@ cdef class BBIFile:
             if resolution == binsize:
                 break
         return i
-
 
 
 cdef class BigWigIntervalIterator:
