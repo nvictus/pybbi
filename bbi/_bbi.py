@@ -105,3 +105,9 @@ def stackup(
 def fetch_intervals(inFile, chrom, start, end, iterator=True):
     with cbbi.open(inFile) as f:
         return f.fetch_intervals(chrom, start, end, iterator)
+
+
+@documented_by(cbbi.BBIFile.fetch_summaries)
+def fetch_summaries(inFile, chrom, start, end, zoom=0):
+    with cbbi.open(inFile) as f:
+        return f.fetch_summaries(chrom, start, end, zoom)
