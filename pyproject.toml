@@ -78,9 +78,8 @@ build-verbosity = 3
 archs = ["x86_64", "aarch64"]
 before-all = "yum install -y gcc make zlib-devel openssl-devel libpng-devel"
 
-
 [tool.cibuildwheel.macos]
-archs = ["x86_64", "arm64"]  # "arm64" needs M1 runner on GitHub Actions
+archs = ["auto"]  # "arm64" needs M1 runner on GitHub Actions
 before-all = """
 brew install pkg-config openssl libpng  # -> /usr/local (x86_64)
 """
