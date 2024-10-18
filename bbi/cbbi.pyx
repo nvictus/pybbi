@@ -579,8 +579,8 @@ cdef class BBIFile:
             raise OSError("File closed")
 
         cdef np.ndarray[object, ndim=1] chroms_ = np.asarray(chroms, dtype=object)
-        cdef np.ndarray[np.int_t, ndim=1] starts_ = np.asarray(starts, dtype=int)
-        cdef np.ndarray[np.int_t, ndim=1] ends_ = np.asarray(ends, dtype=int)
+        cdef np.ndarray[np.int64_t, ndim=1] starts_ = np.asarray(starts, dtype=int)
+        cdef np.ndarray[np.int64_t, ndim=1] ends_ = np.asarray(ends, dtype=int)
         if bins < 0 and (len(chroms_) != len(starts_) or len(starts_) != len(ends_)):
             raise ValueError(
                 "`chroms`, `starts`, and `ends` must have the same length"
