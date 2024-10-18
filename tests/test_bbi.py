@@ -1,5 +1,6 @@
 import os.path as op
 import numpy as np
+import os
 
 import bbi
 import pytest
@@ -49,6 +50,7 @@ def test_sigs():
         assert f.is_remote
 
 
+@pytest.mark.skipif(os.getenv("GITHUB_ACTIONS") == "true", reason="Skipped on GitHub Actions")
 def test_aws_403_redirect():
     # See https://stat.ethz.ch/pipermail/bioc-devel/2016-May/009241.html
     url = 'https://www.encodeproject.org/files/ENCFF620UMO/@@download/ENCFF620UMO.bigWig'
