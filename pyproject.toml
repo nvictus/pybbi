@@ -1,9 +1,7 @@
 [build-system]
 requires = [
-    "Cython >=0.29; python_version<'3.8'",
-    "Cython >=0.29.14; python_version=='3.8'",
-    "Cython >=0.29.15; python_version>='3.9'",
-    "oldest-supported-numpy",
+    "Cython >=3.0",
+    "numpy >=2.0,<3",  # packages built with NumPy 2.x work with both 1.x and 2.x
     "pkgconfig",
     "setuptools",
     "wheel",
