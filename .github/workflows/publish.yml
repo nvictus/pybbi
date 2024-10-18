@@ -2,6 +2,8 @@ name: Build and upload to PyPI
 
 on:
   workflow_dispatch:
+  release:
+    types: [published] 
 
 jobs:
   build_wheels:
@@ -25,7 +27,14 @@ jobs:
         with:
           platforms: all
 
+      # https://cibuildwheel.pypa.io/en/stable/faq/#macos-library-dependencies-do-not-satisfy-target-macos
+      - name: Set MacOS compiler target dynamically from the runner
+        if: runner.os == 'macOS'
+        run: echo "MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion | cut -d. -f1)" >> $GITHUB_ENV
+
       - name: Build wheels
+        env:
+          CIBW_ENVIRONMENT: MACOSX_DEPLOYMENT_TARGET=${{ env.MACOSX_DEPLOYMENT_TARGET }}
         uses: pypa/cibuildwheel@v2.20.0
 
       - uses: actions/upload-artifact@v3
