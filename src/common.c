@@ -341,7 +341,7 @@ if (count > 1)
     }
 }
 
-void slUniqify(void *pList, int (*compare )(const void *elem1,  const void *elem2), void (*free)())
+void slUniqify(void *pList, int (*compare )(const void *elem1,  const void *elem2), void (*free)(void *))
 /* Return sorted list with duplicates removed.
  * Compare should be same type of function as slSort's compare (taking
  * pointers to pointers to elements.  Free should take a simple
@@ -371,7 +371,7 @@ slCat(*pList, b);
 slSort(pList,compare);
 }
 
-void slSortMergeUniq(void *pA, void *b, CmpFunction *compare, void (*free)())
+void slSortMergeUniq(void *pA, void *b, CmpFunction *compare, void (*free)(void *))
 // Merges and sorts a pair of singly linked lists leaving only unique
 // items via slUniqufy.  duplicate itens are defined by the compare routine
 // returning 0. If free is provided, items dropped from list can disposed of.
