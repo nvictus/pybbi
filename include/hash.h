@@ -250,7 +250,7 @@ void freeHashAndVals(struct hash **pHash);
 /* Free up hash table and all values associated with it.
  * (Just calls freeMem on each hel->val) */
 
-void hashFreeWithVals(struct hash **pHash, void (freeFunc)());
+void hashFreeWithVals(struct hash **pHash, void (freeFunc)(void **));
 /* Free up hash table and all values associated with it. freeFunc is a
  * function to free an entry, should take a pointer to a pointer to an
  * entry. */
