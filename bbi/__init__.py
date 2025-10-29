@@ -16,7 +16,7 @@ from ._bbi import (
 
 del cbbi, _bbi
 
-__version__ = '0.4.1'
+__version__ = '0.4.2'
 __all__ = [
     'is_bbi',
     'is_bigwig',
