@@ -1061,13 +1061,15 @@ cdef inline void array_query_summarized(
 
     # Fill output array
     cdef double covFactor = <double>nbins / (end - start)
+    cdef double step = (end - start) / nbins
     cdef bbiSummaryElement *el
     cdef double val
-    cdef int loc, i
+    cdef int bin_start, bin_end, i
     if result:
         for i in range(nbins):
-            loc = start + i*stepSize
-            if loc < validStart or loc >= validEnd:
+            bin_start = start + <int>(<double>i * step)
+            bin_end = start + <int>(<double>(i + 1) * step)
+            if bin_start < validStart or bin_end > validEnd:
                 out[i] = oob
             else:
                 el = &elements[i]
