@@ -101,8 +101,9 @@ See the docstrings for complete documentation.
 
 ## Related projects ##
 
-- [libBigWig](https://github.com/dpryan79/libBigWig): Alternative C library for bigWig and bigBed files by Devon Ryan
-- [pyBigWig](https://github.com/dpryan79/pyBigWig): Python bindings for `libBigWig` by the same author
+- [bigtools](https://github.com/jackh726/bigtools): Alternative BBI library written in Rust with Python bindings; by Jack Huey
+- [libBigWig](https://github.com/dpryan79/libBigWig): Alternative BBI library written in C; by Devon Ryan
+- [pyBigWig](https://github.com/dpryan79/pyBigWig): Python bindings for `libBigWig`
 - [bw-python](https://github.com/brentp/bw-python): Alternative Python wrapper to `libBigWig` by Brent Pederson
 - [bx-python](https://github.com/bxlab/bx-python): Python bioinformatics library from James Taylor's group that includes tools for bbi files.
 
