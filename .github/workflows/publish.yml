@@ -39,7 +39,8 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          path: ./wheelhouse/*.whl
+          name: wheels-${{ matrix.os }}
+          path: wheelhouse/*.whl
 
 
   build_sdist:
@@ -63,23 +64,18 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
+          name: wheels-sdist
           path: dist/*.tar.gz
 
 
   upload_pypi:
     needs: [build_wheels, build_sdist]
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
 
     steps:
-      - uses: actions/download-artifact@v4
-        with:
-          # unpacks default artifact into dist/
-          # if `name: artifact` is omitted, the action will create extra parent dir
-          name: artifact
-          path: dist
-
-      - uses: pypa/gh-action-pypi-publish@v1.13.0
-        with:
-          user: __token__
-          password: ${{ secrets.PYPI_API_TOKEN }}
-          # To test: repository_url: https://test.pypi.org/legacy/
+      - uses: actions/download-artifact@v5
+      - name: Publish distribution 📦 to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+  
