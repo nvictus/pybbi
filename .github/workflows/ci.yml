@@ -25,7 +25,7 @@ jobs:
           sudo apt-get install -y build-essential make zlib1g-dev libssl-dev libpng-dev
     - uses: actions/checkout@v4
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: ${{ matrix.python-version }}
     - name: Build UCSC kent library
