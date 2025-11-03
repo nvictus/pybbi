@@ -23,7 +23,7 @@ jobs:
       run: |
           sudo apt-get update
           sudo apt-get install -y build-essential make zlib1g-dev libssl-dev libpng-dev
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v5
       with:
